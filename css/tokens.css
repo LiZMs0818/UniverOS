@@ -1,0 +1,36 @@
+/* ============================================================
+   Universe OS · 渲染层 · tokens.css
+   设计令牌：重置、字体、深浅色 CSS 变量、滚动条
+   ============================================================ */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;background:var(--bg-root);color:var(--wp-text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-user-select:none;user-select:none;-webkit-font-smoothing:antialiased;touch-action:manipulation}
+input,textarea{-webkit-user-select:text;user-select:text;font-family:inherit;-webkit-touch-callout:default}
+button{font-family:inherit}
+
+:root{
+  --bg-root:#000;--bg-win:rgba(32,32,40,.82);--bg-panel:rgba(20,20,26,.72);--bg-menu:rgba(40,40,48,.94);
+  --bg-input:rgba(255,255,255,.08);--bg-hover:rgba(255,255,255,.14);--bg-toolbar:rgba(0,0,0,.16);
+  --bg-fill:rgba(255,255,255,.05);--text:#fff;--text-soft:rgba(255,255,255,.88);
+  --text-dim:rgba(255,255,255,.55);--text-mute:rgba(255,255,255,.35);
+  --border:rgba(255,255,255,.1);--border-strong:rgba(255,255,255,.18);
+  --shadow:0 24px 60px rgba(0,0,0,.5);--shadow-menu:0 16px 40px rgba(0,0,0,.5);
+  --accent:#4da3ff;--accent-hover:#6db5ff;--danger:#ff6b6b;--warn:#ffb340;--ok:#34c759;
+  --scrollbar:rgba(255,255,255,.18);
+  /* 壳层文字对比色：主屏幕/桌面壳层文字始终白色（不随模式与壁纸切换） */
+  --wp-text:#fff;--wp-text-soft:rgba(255,255,255,.88);--wp-text-dim:rgba(255,255,255,.55);--wp-text-mute:rgba(255,255,255,.35);
+}
+html[data-mode="light"]{
+  --bg-root:#eef0f5;--bg-win:rgba(245,246,250,.68);--bg-panel:rgba(235,236,242,.62);--bg-menu:rgba(250,250,254,.82);
+  --bg-input:rgba(0,0,0,.05);--bg-hover:rgba(0,0,0,.08);--bg-toolbar:rgba(0,0,0,.03);
+  --bg-fill:rgba(0,0,0,.04);--text:#1a1a1f;--text-soft:rgba(0,0,0,.82);
+  --text-dim:rgba(0,0,0,.52);--text-mute:rgba(0,0,0,.35);
+  --border:rgba(0,0,0,.09);--border-strong:rgba(0,0,0,.14);
+  --shadow:0 20px 50px rgba(0,0,0,.18);--shadow-menu:0 12px 32px rgba(0,0,0,.15);
+  --accent:#0066ff;--accent-hover:#2b7fff;--scrollbar:rgba(0,0,0,.18);
+}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--scrollbar);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
