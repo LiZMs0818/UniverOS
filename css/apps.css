@@ -311,4 +311,16 @@
 .as-back{padding:5px 12px;border:1px solid var(--border-strong);border-radius:7px;background:var(--bg-input);
   color:var(--text-soft);font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s}
 .as-back:hover{background:var(--bg-hover)}
+/* M4 · 代码块面板（ctxmenu-popup 系统菜单基类 + 修饰） */
+.as-snip-open{padding:5px 12px;border:1px solid var(--border-strong);border-radius:7px;background:var(--bg-input);
+  color:var(--text-soft);font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s}
+.as-snip-open:hover{background:var(--bg-hover);color:var(--accent);border-color:var(--accent)}
+.as-snip{min-width:230px;max-width:300px;max-height:62vh;overflow-y:auto;padding:6px}
+.as-snip .ctx-item{gap:10px}
+.as-snip-title{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:8px 12px 2px}
+.as-snip-hint{font-size:11.5px;line-height:1.5;white-space:normal;padding:8px 12px}
+.as-snip-row{justify-content:flex-start}
+.as-snip-del{color:var(--text-mute);padding:2px 7px;border-radius:5px;font-size:11px;cursor:pointer}
+.as-snip-del:hover{color:var(--danger);background:var(--bg-hover)}
+.as-snip-save{color:var(--accent)}
 

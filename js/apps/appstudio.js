@@ -3,6 +3,8 @@
    Universe Studio：Swift Playgrounds 式原生应用开发工具
    M1 · 持久化 + 启动台注册：保存为 /apps/<名>.uapp → 动态注册 → 开机扫描加载
    M2 · 编辑器：行号 + 语法高亮（透明 textarea 叠高亮层）+ 报错定位到行
+   M3 · 沙箱运行时 + 四通道调试（见 js/core/sandbox.js）
+   M4 · 代码块系统：内置代码块 / 自定义代码块（选中代码存为代码块）插入到光标处
    全手动 DOM 构建（同 terminal.js 先例）：编辑器/预览不进渲染树
    ============================================================ */
 (function (G) {
@@ -28,6 +30,74 @@
     '  }',
     '}'
   ].join('\n');
+
+  /* ---------- M4 · 内置代码块：开发构件（插入 render() 的返回数组中使用） ---------- */
+  const BUILTIN_SNIPPETS = [
+    {
+      name: '按钮组',
+      code: [
+        '/* 按钮组：主按钮 + 次按钮 */',
+        '[',
+        "  h('button', { className: 'as-btn', onclick: () => console.log('主操作') }, '主按钮'),",
+        "  h('button', { style: 'padding:6px 16px;border:1px solid var(--text-dim);border-radius:8px;background:none;color:var(--text);cursor:pointer;', onclick: () => console.log('次操作') }, '次按钮')",
+        '],'
+      ].join('\n')
+    },
+    {
+      name: '横向菜单',
+      code: [
+        '/* 横向菜单：链接导航 */',
+        "[",
+        "  '首页', '应用', '设置'",
+        "].map(t => h('a', { style: 'margin-right:14px;color:var(--text-dim);cursor:pointer;text-decoration:none;',",
+        "  onclick: () => console.log('打开 ' + t) }, t)),"
+      ].join('\n')
+    },
+    {
+      name: '输入行',
+      code: [
+        '/* 输入行：输入 + 提交 */',
+        '[',
+        "  h('input', { placeholder: '输入内容…', style: 'flex:1;' }),",
+        "  h('button', { className: 'as-btn', onclick: () => {",
+        "    const v = this._root.querySelector('input').value.trim();",
+        "    if (v) console.log('提交：' + v);",
+        '  } }, \'提交\')',
+        '],'
+      ].join('\n')
+    },
+    {
+      name: '数据列表',
+      code: [
+        '/* 数据列表：来自 state.items */',
+        '[',
+        "  (this.state.items || ['条目一', '条目二']).map(it =>",
+        "    h('div', { style: 'padding:6px 8px;border-bottom:1px solid var(--border);' }, it)),",
+        ']'
+      ].join('\n')
+    },
+    {
+      name: '信息卡片',
+      code: [
+        '/* 信息卡片 */',
+        "h('div', { style: 'border:1px solid var(--border-strong);border-radius:10px;padding:14px;' }, [",
+        "  h('div', { style: 'font-weight:600;margin-bottom:6px;' }, '卡片标题'),",
+        "  h('div', { style: 'color:var(--text-dim);font-size:12px;line-height:1.6;' }, '卡片描述：放一句说明文字。')",
+        ']),'
+      ].join('\n')
+    },
+    {
+      name: '状态标签',
+      code: [
+        '/* 状态标签组 */',
+        '[',
+        "  { t: '进行中', c: '#ffb340' },",
+        "  { t: '已完成', c: '#34c759' },",
+        "  { t: '出错', c: '#ff6b61' }",
+        "].map(s => h('span', { style: 'display:inline-block;margin-right:6px;padding:2px 10px;border-radius:10px;font-size:11px;color:' + s.c + ';border:1px solid ' + s.c + ';' }, s.t)),"
+      ].join('\n')
+    }
+  ];
 
   /* ---------- 轻量 JS 语法高亮 ---------- */
   const TOK_RE = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`)|\b(class)\s+([A-Za-z_$][\w$]*)|\b(class|extends|constructor|super|return|this|new|function|const|let|var|if|else|for|while|typeof|in|of|instanceof|import|export|from|async|await|yield|delete|void|do|switch|case|break|continue|throw|try|catch|finally|true|false|null|undefined)\b|\b(\d+(?:\.\d+)?)\b/g;
@@ -70,6 +140,10 @@
       this._current = null;         // 当前编辑的应用名
       this._currentId = null;       // 当前编辑的应用 id（保存改名时清理旧注册）
       this._runHandle = null;       // 当前沙箱句柄（kill 用）
+      this._selStart = 0;           // M4 · 编辑器光标选区快照（代码块插入点）
+      this._selEnd = 0;
+      this._snipBtn = null;         // M4 · 代码块面板
+      this._snipPanel = null;
     }
 
     render() { return h('div', { className: 'as' }); }
@@ -109,6 +183,7 @@
     /* ---------- 工作台主界面 ---------- */
     _buildHome() {
       this._mode = 'home';
+      this._closeSnip();
       const root = this._root;
       const bar = root.querySelector('.as-toolbar');
       const main = root.querySelector('.as-main');
@@ -220,6 +295,7 @@
       bar.innerHTML = ''
         + '<input class="as-name" placeholder="应用名称" value="' + escAttr(this._current || '') + '" spellcheck="false">'
         + '<span style="flex:1"></span>'
+        + '<button class="as-snip-open">代码块</button>'
         + '<button class="as-back">返回</button>'
         + '<button class="as-run">运行</button>'
         + '<button class="as-save">保存</button>';
@@ -262,6 +338,11 @@
         this._hl.scrollLeft = this._ta.scrollLeft;
         this._gutter.scrollTop = this._ta.scrollTop;
       });
+      this._ta.addEventListener('click', () => this._syncSel());
+      this._ta.addEventListener('keyup', () => this._syncSel());
+      this._ta.addEventListener('mouseup', () => this._syncSel());
+      this._snipBtn = bar.querySelector('.as-snip-open');
+      if (this._snipBtn) this._snipBtn.addEventListener('click', () => this._toggleSnippets());
       bar.querySelector('.as-back').addEventListener('click', () => this._buildHome());
       bar.querySelector('.as-run').addEventListener('click', () => this.run());
       bar.querySelector('.as-save').addEventListener('click', () => this.save());
@@ -286,6 +367,136 @@
       this._hl.scrollTop = this._ta.scrollTop;
       this._hl.scrollLeft = this._ta.scrollLeft;
       this._gutter.scrollTop = this._ta.scrollTop;
+    }
+
+    /* ---------- M4 · 代码块：内置 + 自定义，插入到光标 ---------- */
+    _syncSel() {
+      if (!this._ta) return;
+      this._selStart = this._ta.selectionStart;
+      this._selEnd = this._ta.selectionEnd;
+    }
+
+    _customSnippets() {
+      const list = NS.core.store.get('appstudio.snippets', []);
+      return Array.isArray(list) ? list : [];
+    }
+
+    _saveCustomSnippets(list) {
+      NS.core.store.set('appstudio.snippets', list.slice());
+    }
+
+    _toggleSnippets() {
+      if (this._snipPanel) { this._closeSnip(); return; }
+      const btn = this._snipBtn;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      const panel = NS.render.createElement(NS.render.h('div', { className: 'ctxmenu-popup as-snip' }));
+      document.body.appendChild(panel);
+      this._snipPanel = panel;
+      this._placeSnip(r);
+      this._renderSnipPanel();
+      this._snipDismiss = e => {
+        if (this._snipPanel && !this._snipPanel.contains(e.target)) this._closeSnip();
+      };
+      setTimeout(() => document.addEventListener('pointerdown', this._snipDismiss, true), 0);
+    }
+
+    _placeSnip(r) {
+      const panel = this._snipPanel;
+      if (!panel) return;
+      panel.style.left = '0px'; panel.style.top = '0px';
+      const w = panel.offsetWidth, h = panel.offsetHeight;
+      let left = r.left, top = r.bottom + 6;
+      if (left + w > innerWidth - 8) left = innerWidth - w - 8;
+      if (top + h > innerHeight - 8) top = r.top - h - 6;
+      panel.style.left = Math.max(8, left) + 'px';
+      panel.style.top = Math.max(8, top) + 'px';
+    }
+
+    _closeSnip() {
+      if (this._snipPanel) { this._snipPanel.remove(); this._snipPanel = null; }
+      if (this._snipDismiss) { document.removeEventListener('pointerdown', this._snipDismiss, true); this._snipDismiss = null; }
+    }
+
+    _renderSnipPanel() {
+      const panel = this._snipPanel;
+      if (!panel) return;
+      panel.textContent = '';
+      const hh = NS.render.h;
+      const row = (label, action) => hh('div', { className: 'ctx-item', onclick: action }, label);
+      const children = [];
+      children.push(hh('div', { className: 'ctx-item disabled as-snip-title' }, '内置代码块'));
+      BUILTIN_SNIPPETS.forEach(s => children.push(row(s.name, () => this._insertSnippet(s.code, s.name))));
+      children.push(hh('div', { className: 'ctx-sep' }));
+      children.push(hh('div', { className: 'ctx-item disabled as-snip-title' }, '我的代码块'));
+      const customs = this._customSnippets();
+      if (customs.length === 0) {
+        children.push(hh('div', { className: 'ctx-item disabled as-snip-hint' }, '还没有 · 选中代码后点「存选中为代码块」'));
+      }
+      customs.forEach((s, i) => {
+        children.push(hh('div', {
+          className: 'ctx-item as-snip-row',
+          onclick: () => this._insertSnippet(s.code, s.name)
+        }, [
+          hh('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, s.name),
+          hh('span', {
+            className: 'as-snip-del',
+            onclick: (e) => { e.stopPropagation(); this._deleteCustomSnippet(i); }
+          }, '✕')
+        ]));
+      });
+      children.push(hh('div', { className: 'ctx-sep' }));
+      children.push(hh('div', {
+        className: 'ctx-item as-snip-save',
+        onclick: () => this._saveSnippetFromSelection()
+      }, '存选中为代码块'));
+      children.forEach(c => panel.appendChild(NS.render.createElement(c)));
+    }
+
+    _insertSnippet(code, name) {
+      if (!this._ta) return;
+      const cur = this._ta.value;
+      const a = Math.min(this._selStart, this._selEnd, cur.length);
+      const b = Math.min(Math.max(this._selStart, this._selEnd), cur.length);
+      let ins = code;
+      /* 保证代码块与前后代码不粘行（独立 class 声明需要换行分隔） */
+      if (a > 0 && !/\n$/.test(cur.slice(0, a))) ins = '\n' + ins;
+      if (b < cur.length && !/^\n/.test(cur.slice(b))) ins = ins + '\n';
+      const pos = a + ins.length;
+      this._ta.focus();
+      this._ta.value = cur.slice(0, a) + ins + cur.slice(b);
+      this._ta.selectionStart = this._ta.selectionEnd = pos;
+      this._selStart = this._selEnd = pos;
+      this._syncEditor();
+      this.setStatus('as-ok', '已插入代码块「' + (name || '') + '」');
+      this._closeSnip();
+    }
+
+    async _saveSnippetFromSelection() {
+      if (!this._ta) return;
+      const cur = this._ta.value;
+      const a = Math.min(this._selStart, this._selEnd, cur.length);
+      const b = Math.min(Math.max(this._selStart, this._selEnd), cur.length);
+      const code = cur.slice(a, b);
+      if (!code.trim()) { NS.render.toast('请先在编辑器里选中一段代码'); return; }
+      const name = await NS.render.promptDialog('代码块名称', '我的代码块 ' + (this._customSnippets().length + 1));
+      if (!name) return;
+      const list = this._customSnippets();
+      list.push({ name: name, code: code });
+      this._saveCustomSnippets(list);
+      NS.render.toast('已保存代码块「' + name + '」');
+      this._renderSnipPanel();
+    }
+
+    async _deleteCustomSnippet(i) {
+      const list = this._customSnippets();
+      const sn = list[i];
+      if (!sn) return;
+      if (!(await NS.render.confirmDialog('删除代码块「' + sn.name + '」？'))) return;
+      list.splice(i, 1);
+      this._saveCustomSnippets(list);
+      NS.render.toast('已删除代码块「' + sn.name + '」');
+      this._renderSnipPanel();
     }
 
     _clearErr() {

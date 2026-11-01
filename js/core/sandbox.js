@@ -74,12 +74,13 @@ function h(tag, attrs, children) {
     else if (v !== null && v !== undefined) el.setAttribute(k, v);
   }
   var ch = Array.isArray(children) ? children : (children === undefined || children === null ? [] : [children]);
-  for (var i = 0; i < ch.length; i++) {
-    var c = ch[i];
-    if (c === null || c === undefined) continue;
+  function append(c) {
+    if (c === null || c === undefined) return;
     if (typeof c === 'string' || typeof c === 'number') el.appendChild(document.createTextNode(String(c)));
+    else if (Array.isArray(c)) { for (var j = 0; j < c.length; j++) append(c[j]); }
     else if (c.nodeType) el.appendChild(c);
   }
+  for (var i = 0; i < ch.length; i++) append(ch[i]);
   return el;
 }
 function Component(props) { this.props = props || {}; this.state = {}; this._root = null; }

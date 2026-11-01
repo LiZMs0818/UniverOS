@@ -333,7 +333,7 @@
         h('h2', null, '关于'),
         h('div', { className: 'st-about' }, [
           h('p', null, [h('b', null, 'Universe'), ' 是一个浏览器端的桌面式操作系统模拟。']),
-          h('p', { style: { marginTop: '12px', color: 'var(--text-dim)', fontSize: '12px' } }, '版本 2.1.0 · 多文件 · 纯原生 · 零依赖')
+          h('p', { style: { marginTop: '12px', color: 'var(--text-dim)', fontSize: '12px' } }, '版本 2.2.0 · 多文件 · 纯原生 · 零依赖')
         ]),
         SectionTitle('系统信息'),
         KVRow('分辨率', null, h('span', { style: { color: 'var(--text-dim)' } }, this.state.res)),
