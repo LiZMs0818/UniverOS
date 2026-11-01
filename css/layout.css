@@ -167,7 +167,7 @@ html[data-mode="light"] #launcher{background:rgba(240,240,248,.55)}
 .launcher-item .ic svg{width:56%;height:56%;display:block}
 .launcher-item:active .ic{transform:scale(.9)}
 .launcher-item span{font-size:12px;opacity:.9}
-.launcher-item.in-dock .ic,.launcher-item.on-desk .ic{box-shadow:0 8px 20px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.2),0 0 0 2px var(--accent)}
+.launcher-item.in-dock .ic,.launcher-item.on-desk .ic{box-shadow:0 8px 20px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.2)}
 .launcher-item.menu-anchor .ic{filter:brightness(1.2) drop-shadow(0 0 12px rgba(255,255,255,.4));transform:scale(1.06)}
 .launcher-empty{color:var(--text-dim);font-size:14px;margin-top:40px}
 

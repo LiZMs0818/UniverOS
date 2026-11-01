@@ -36,6 +36,8 @@
       this.mainRef = null;
     }
 
+    componentWillUnmount() { this._destroyUv(); }
+
     /* ---------- 路径工具 ---------- */
     joinPath(b, n) { return b ? b + '/' + n : n; }
 
@@ -93,7 +95,12 @@
             value: s.query,
             oninput: e => { this.setState({ query: e.target.value }); this.refresh(); }
           }),
-          h('button', { className: 'fm-btn', dataset: { act: 'view' }, onclick: () => this.setView(s.view === 'grid' ? 'list' : 'grid'), html: s.view === 'grid' ? I.list : I.grid }),
+          h('button', {
+            className: 'fm-btn', dataset: { act: 'view' },
+            title: '视图：' + (s.view === 'grid' ? '网格' : '列表'),
+            onclick: () => this.setView(s.view === 'grid' ? 'list' : 'grid'),
+            html: s.view === 'grid' ? I.list : I.grid
+          }),
           h('button', { className: 'fm-btn', title: '导入', dataset: { act: 'import' }, onclick: () => this.fileInputRef && this.fileInputRef.click(), html: I.import }),
           h('button', { className: 'fm-btn', dataset: { act: 'refresh' }, onclick: () => this.refresh(), html: I.refresh })
         ]),
@@ -101,6 +108,7 @@
           h('span', null, '已选 ' + selCount + ' 项'),
           h('span', { className: 'grow' }),
           h('button', { className: 'mini-btn', onclick: () => this.selectAll() }, '全选'),
+          h('button', { className: 'mini-btn', onclick: () => this.compressSelected() }, '压缩'),
           h('button', { className: 'mini-btn', onclick: () => this.deleteSelected() }, '删除'),
           h('button', { className: 'mini-btn', onclick: () => this.cancelSelect() }, '取消')
         ]),
@@ -164,8 +172,8 @@
 
     /* ---------- 列表绑定（渲染后执行：tap / 拖到桌面） ---------- */
     componentDidUpdate() {
-      if (!this.listRef) return;
       const s = this.state;
+      if (!this.listRef) return;
       const items = this.listRef.querySelectorAll('[data-path]');
       items.forEach(el => {
         const path = el.dataset.path;
@@ -237,8 +245,92 @@
     /* ---------- 文件操作 ---------- */
     openFile(path) {
       const ext = path.split('.').pop().toLowerCase();
+      if (ext === 'zip') { this.extractZip(path); return; }
       if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].indexOf(ext) >= 0) NS.system.winman.openApp('imageviewer', { path });
       else NS.system.winman.openApp('texteditor', { path });
+    }
+
+    /* ---------- ZIP 压缩 / 解压 ---------- */
+    async extractZip(path) {
+      const name = path.split('/').pop() || 'archive.zip';
+      try {
+        const blob = await fs.readBlob(path);
+        const entries = await NS.core.zip.unzip(blob);
+        const files = entries.filter(e => !e.isDirectory);
+        const dirs = entries.filter(e => e.isDirectory);
+        const existing = await fs.list(this.state.cwd);
+        const names = new Set(existing.map(e => e.name));
+        /* 取不重名的目标名（文件保留扩展名，目录直接加后缀） */
+        const uniqueName = (n) => {
+          let c = n, i = 1;
+          while (names.has(c)) {
+            const dot = n.lastIndexOf('.');
+            if (dot > 0) c = n.slice(0, dot) + ' (' + (++i) + ')' + n.slice(dot);
+            else c = n + ' (' + (++i) + ')';
+          }
+          return c;
+        };
+        const writeTree = async (basePath, stripTop) => {
+          let count = 0;
+          for (const e of entries) {
+            let rel = e.name;
+            if (stripTop) rel = rel.split('/').slice(1).join('/');
+            if (!rel) continue;
+            if (e.isDirectory) { await fs.mkdir(this.joinPath(basePath, rel.replace(/\/+$/, ''))); continue; }
+            const parts = rel.split('/');
+            const fname = parts.pop();
+            const parent = parts.join('/');
+            if (parent) await fs.mkdir(this.joinPath(basePath, parent));
+            await fs.write(this.joinPath(basePath, parent ? parent + '/' + fname : fname), new Blob([e.data]));
+            count++;
+          }
+          return count;
+        };
+        let count;
+        /* 形态判断：单个顶层文件 → 直接释放为文件；顶层唯一目录 → 剥掉该层建同名文件夹；其余 → 建同名文件夹保持原结构 */
+        if (files.length === 1 && dirs.length === 0 && files[0].name.indexOf('/') < 0) {
+          const destFile = this.joinPath(this.state.cwd, uniqueName(files[0].name));
+          await fs.write(destFile, new Blob([files[0].data]));
+          count = 1;
+        } else {
+          const topDirs = new Set(files.map(e => e.name.split('/')[0]));
+          let stripTop = false, destName;
+          if (topDirs.size === 1 && dirs.every(e => e.name.split('/')[0] === Array.from(topDirs)[0])) {
+            stripTop = true;
+            destName = uniqueName(Array.from(topDirs)[0]);
+          } else {
+            destName = uniqueName(name.replace(/\.zip$/i, '') || 'extracted');
+          }
+          count = await writeTree(this.joinPath(this.state.cwd, destName), stripTop);
+        }
+        toast('已解压 ' + count + ' 项');
+        this.refresh();
+      } catch (err) { toast('解压失败：' + err.message); }
+    }
+
+    async compressOne(path, entry) {
+      const src = entry ? entry.name : (path.split('/').pop() || 'archive');
+      const name = src.replace(/\.zip$/i, '') + '.zip';
+      try {
+        const blob = await NS.core.zip.zipFromFS([path], { FS: fs });
+        await fs.write(this.joinPath(this.state.cwd, name), blob);
+        toast('已压缩为 ' + name);
+        this.refresh();
+      } catch (err) { toast('压缩失败：' + err.message); }
+    }
+
+    async compressSelected() {
+      const sel = this.state.selection;
+      if (!sel.length) return;
+      try {
+        const blob = await NS.core.zip.zipFromFS(sel, { FS: fs });
+        const src = sel.length === 1 ? (sel[0].split('/').pop() || 'archive') : 'archive';
+        const name = src.replace(/\.zip$/i, '') + '.zip';
+        await fs.write(this.joinPath(this.state.cwd, name), blob);
+        this.setState({ selection: [], selecting: false });
+        toast('已压缩 ' + sel.length + ' 项');
+        this.refresh();
+      } catch (err) { toast('压缩失败：' + err.message); }
     }
 
     async importFiles(fileList) {
@@ -343,6 +435,11 @@
             } catch (err) { toast('导出失败：' + err.message); }
           }
         });
+      }
+      if (ext === 'zip') {
+        items.push({ label: '解压到当前文件夹', action: () => this.extractZip(path) });
+      } else {
+        items.push({ label: '压缩为 ZIP', action: () => this.compressOne(path, entry) });
       }
       items.push({ label: '重命名', action: () => this.renameEntry(path, entry.name) });
       items.push({ label: '复制', action: () => { this._clipboard = { path, mode: 'copy', name: entry.name }; toast('已复制'); } });

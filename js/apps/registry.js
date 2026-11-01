@@ -54,8 +54,61 @@
       id: 'trash', name: '废纸篓', hidden: true, icon: NS.render.icons.UI.trash,
       bg: 'linear-gradient(150deg,#8e8e98,#3a3a42)', fg: '#fff',
       build: (body) => new NS.apps.TrashApp().mount(body)
+    },
+    taskmanager: {
+      id: 'taskmanager', name: '进程', icon: I.taskmanager,
+      bg: 'linear-gradient(150deg,#7a7a86,#2c2c34)', fg: '#fff',
+      build: (body) => new NS.apps.TaskManagerApp().mount(body)
+    },
+    terminal: {
+      id: 'terminal', name: '终端', icon: I.terminal,
+      bg: 'linear-gradient(150deg,#3a3a44,#101014)', fg: '#fff',
+      build: (body) => new NS.apps.TerminalApp().mount(body)
+    },
+    appstudio: {
+      id: 'appstudio', name: 'Universe Studio', icon: I.appstudio,
+      bg: 'linear-gradient(150deg,#8a8a96,#26262e)', fg: '#fff',
+      build: (body) => new NS.apps.AppStudioApp().mount(body)
     }
   };
 
   NS.apps.APPS = APPS;
+
+  /* ---------- 动态应用（Universe Studio 产物） ---------- */
+  /* 编译用户代码 → Component 类（延迟到打开时才编译，注册时不做） */
+  NS.apps.compileApp = function (code) {
+    const factory = new Function('Component', 'h', '"use strict"; return (' + code + '\n);');
+    return factory(NS.render.Component, NS.render.h);
+  };
+
+  /* 动态注册：应用定义只是数据（name + code），build 打开时沙箱运行
+     M3：用户代码在 <iframe sandbox="allow-scripts"> 内执行，拿不到父系统任何全局 */
+  NS.apps.registerDynamic = function (app) {
+    const id = app.id || ('user' + (NS.apps._dynSeq = (NS.apps._dynSeq || 1000) + 1));
+    APPS[id] = {
+      id: id,
+      name: app.name,
+      icon: app.icon || NS.render.icons.APPS.appstudio,
+      bg: 'linear-gradient(150deg,#8a8a96,#26262e)', fg: '#fff',
+      build: (body) => {
+        body.textContent = '';
+        NS.sandbox.mountApp(body, app.code, {
+          error: () => {},
+          fatal: (item) => {
+            body.textContent = '';
+            const d = document.createElement('div');
+            d.className = 'as-error';
+            d.style.cssText = 'margin:14px;padding:10px 12px;';
+            d.textContent = (item.line ? '第 ' + item.line + ' 行 · ' : '') + (item.message || '运行失败');
+            body.appendChild(d);
+          }
+        }, NS.sandbox.readTheme());
+      }
+    };
+    return id;
+  };
+
+  NS.apps.unregisterDynamic = function (id) {
+    delete APPS[id];
+  };
 })(window);

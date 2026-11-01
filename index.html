@@ -6,10 +6,10 @@
 <meta name="theme-color" content="#0b0b12">
 <title>Universe</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3.5' y='3.5' width='7' height='7' rx='1.8' fill='%236a68f0'/%3E%3Crect x='13.5' y='3.5' width='7' height='7' rx='1.8' fill='%235ac8fa'/%3E%3Crect x='3.5' y='13.5' width='7' height='7' rx='1.8' fill='%23ff9500'/%3E%3Crect x='13.5' y='13.5' width='7' height='7' rx='1.8' fill='%2334c759'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/tokens.css?v=30">
-<link rel="stylesheet" href="css/layout.css?v=30">
-<link rel="stylesheet" href="css/ui.css?v=30">
-<link rel="stylesheet" href="css/apps.css?v=30">
+<link rel="stylesheet" href="css/tokens.css?v=67">
+<link rel="stylesheet" href="css/layout.css?v=67">
+<link rel="stylesheet" href="css/ui.css?v=67">
+<link rel="stylesheet" href="css/apps.css?v=67">
 </head>
 <body>
 
@@ -90,42 +90,47 @@
 <div id="startup-toast" class="toast" style="top:36px;bottom:auto">建议横屏使用，体验更佳</div>
 
 <!-- ===== 加载顺序 = core → render → apps → system → boot（均为传统 script，file:// 可用，无绝对路径，GitHub Pages 子路径可用） ===== -->
-<script src="js/core/store.js?v=30"></script>
-<script src="js/core/config.js?v=30"></script>
-<script src="js/core/theme.js?v=30"></script>
-<script src="js/core/fs.js?v=30"></script>
-<script src="js/core/utils.js?v=30"></script>
+<script src="js/core/store.js?v=67"></script>
+<script src="js/core/config.js?v=67"></script>
+<script src="js/core/theme.js?v=67"></script>
+<script src="js/core/fs.js?v=67"></script>
+<script src="js/core/zip.js?v=67"></script>
+<script src="js/core/utils.js?v=67"></script>
+<script src="js/core/sandbox.js?v=67"></script>
 
-<script src="js/render/res.js?v=30"></script>
-<script src="js/render/component.js?v=30"></script>
-<script src="js/render/svg-icons.js?v=30"></script>
-<script src="js/render/controls.js?v=30"></script>
-<script src="js/render/dialog.js?v=30"></script>
-<script src="js/render/toast.js?v=30"></script>
-<script src="js/render/menu.js?v=30"></script>
-<script src="js/render/window-frame.js?v=30"></script>
+<script src="js/render/res.js?v=67"></script>
+<script src="js/render/component.js?v=67"></script>
+<script src="js/render/svg-icons.js?v=67"></script>
+<script src="js/render/controls.js?v=67"></script>
+<script src="js/render/dialog.js?v=67"></script>
+<script src="js/render/toast.js?v=67"></script>
+<script src="js/render/menu.js?v=67"></script>
+<script src="js/render/window-frame.js?v=67"></script>
 
-<script src="js/apps/registry.js?v=30"></script>
-<script src="js/apps/settings.js?v=30"></script>
-<script src="js/apps/calculator.js?v=30"></script>
-<script src="js/apps/notes.js?v=30"></script>
-<script src="js/apps/clock.js?v=30"></script>
-<script src="js/apps/browser.js?v=30"></script>
-<script src="js/apps/files.js?v=30"></script>
-<script src="js/apps/text-editor.js?v=30"></script>
-<script src="js/apps/image-viewer.js?v=30"></script>
-<script src="js/apps/trash.js?v=30"></script>
+<script src="js/apps/registry.js?v=67"></script>
+<script src="js/apps/settings.js?v=67"></script>
+<script src="js/apps/calculator.js?v=67"></script>
+<script src="js/apps/notes.js?v=67"></script>
+<script src="js/apps/clock.js?v=67"></script>
+<script src="js/apps/browser.js?v=67"></script>
+<script src="js/apps/files.js?v=67"></script>
+<script src="js/apps/text-editor.js?v=67"></script>
+<script src="js/apps/image-viewer.js?v=67"></script>
+<script src="js/apps/trash.js?v=67"></script>
+<script src="js/apps/taskmanager.js?v=67"></script>
+<script src="js/apps/terminal.js?v=67"></script>
+<script src="js/apps/appstudio.js?v=67"></script>
 
-<script src="js/system/layout.js?v=30"></script>
-<script src="js/system/window-manager.js?v=30"></script>
-<script src="js/system/spotlight.js?v=30"></script>
-<script src="js/system/statusbar.js?v=30"></script>
-<script src="js/system/control-center.js?v=30"></script>
-<script src="js/system/dock.js?v=30"></script>
-<script src="js/system/desktop.js?v=30"></script>
-<script src="js/system/launcher.js?v=30"></script>
-<script src="js/system/keyboard.js?v=30"></script>
-<script src="js/system/fps.js?v=30"></script>
-<script src="js/system/boot.js?v=30"></script>
+<script src="js/system/layout.js?v=67"></script>
+<script src="js/system/window-manager.js?v=67"></script>
+<script src="js/system/spotlight.js?v=67"></script>
+<script src="js/system/statusbar.js?v=67"></script>
+<script src="js/system/control-center.js?v=67"></script>
+<script src="js/system/dock.js?v=67"></script>
+<script src="js/system/desktop.js?v=67"></script>
+<script src="js/system/launcher.js?v=67"></script>
+<script src="js/system/keyboard.js?v=67"></script>
+<script src="js/system/fps.js?v=67"></script>
+<script src="js/system/boot.js?v=67"></script>
 </body>
 </html>

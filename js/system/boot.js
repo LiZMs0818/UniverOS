@@ -39,6 +39,24 @@
         setTimeout(() => NS.render.toast('沙箱环境，文件保存在内存中。部署后自动启用持久化。', 4000), 1200);
       }
     });
+    /* 扫描 /apps/ 目录，加载 Universe Studio 保存的动态应用（应用只是数据，注册即用） */
+    NS.core.fs.backend().then(() => {
+      (async () => {
+        try {
+          await NS.core.fs.mkdir('/apps');
+          const list = await NS.core.fs.list('/apps');
+          for (const it of list) {
+            if (it.kind !== 'file' || !it.name.endsWith('.uapp')) continue;
+            const blob = await NS.core.fs.readBlob('/apps/' + it.name);
+            const def = JSON.parse(await blob.text());
+            if (!def || typeof def.code !== 'string') continue;
+            NS.apps.registerDynamic(def);
+          }
+        } catch (e) { /* 目录不存在或读取失败时静默跳过 */ }
+        NS.system.dock.renderDock();
+        NS.system.launcher.renderLauncher();
+      })();
+    });
   }
 
   NS.system.boot = { init };

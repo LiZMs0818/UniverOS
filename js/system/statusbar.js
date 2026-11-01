@@ -117,7 +117,7 @@
     const overlay = NS.render.createElement(h('div', { className: 'modal-overlay' }, [
       h('div', { className: 'modal-box' }, [
         h('div', { className: 'modal-title' }, '关于 Universe OS'),
-        h('div', { className: 'modal-msg' }, 'Universe OS 2.0.0\n声明式渲染 · 多文件工程（系统 / 渲染 / 软件 三部分）\n共 38 个文件 · 双击打开与 GitHub Pages 均可用'),
+        h('div', { className: 'modal-msg' }, 'Universe OS 2.1.0\n声明式渲染 · 多文件工程（系统 / 渲染 / 软件 三部分）\n共 38 个文件 · 双击打开与 GitHub Pages 均可用'),
         h('div', { className: 'modal-actions' }, [
           MiniButton({ label: '好', primary: true, onClick: () => overlay.remove() })
         ])

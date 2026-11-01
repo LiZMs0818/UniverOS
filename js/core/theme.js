@@ -21,6 +21,8 @@
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', m === 'light' ? '#f5f6fa' : '#0b0b12');
     /* 壁纸不随模式切换；壳层文字对比色由壁纸亮度决定（见 applyWallpaper） */
+    /* 通知控制中心刷新深色开关（可能尚未加载，做存在性检查） */
+    if (NS.system && NS.system.controlCenter && NS.system.controlCenter.syncCCUI) NS.system.controlCenter.syncCCUI();
   }
 
   function applyForcedLandscape() {
