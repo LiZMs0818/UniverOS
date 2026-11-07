@@ -49,7 +49,7 @@
             if (it.kind !== 'file' || !it.name.endsWith('.uapp')) continue;
             const blob = await NS.core.fs.readBlob('/apps/' + it.name);
             const def = JSON.parse(await blob.text());
-            if (!def || typeof def.code !== 'string') continue;
+            if (!def || (typeof def.code !== 'string' && !(Array.isArray(def.pages) && def.pages.length))) continue;
             NS.apps.registerDynamic(def);
           }
         } catch (e) { /* 目录不存在或读取失败时静默跳过 */ }

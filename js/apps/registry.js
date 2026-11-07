@@ -85,6 +85,7 @@
      M3：用户代码在 <iframe sandbox="allow-scripts"> 内执行，拿不到父系统任何全局 */
   NS.apps.registerDynamic = function (app) {
     const id = app.id || ('user' + (NS.apps._dynSeq = (NS.apps._dynSeq || 1000) + 1));
+    const isMulti = Array.isArray(app.pages) && app.pages.length > 0;
     APPS[id] = {
       id: id,
       name: app.name,
@@ -92,17 +93,31 @@
       bg: 'linear-gradient(150deg,#8a8a96,#26262e)', fg: '#fff',
       build: (body) => {
         body.textContent = '';
-        NS.sandbox.mountApp(body, app.code, {
-          error: () => {},
-          fatal: (item) => {
-            body.textContent = '';
-            const d = document.createElement('div');
-            d.className = 'as-error';
-            d.style.cssText = 'margin:14px;padding:10px 12px;';
-            d.textContent = (item.line ? '第 ' + item.line + ' 行 · ' : '') + (item.message || '运行失败');
-            body.appendChild(d);
-          }
-        }, NS.sandbox.readTheme());
+        const onFatal = (item) => {
+          body.textContent = '';
+          const d = document.createElement('div');
+          d.className = 'as-error';
+          d.style.cssText = 'margin:14px;padding:10px 12px;';
+          d.textContent = (item.page ? '页面「' + item.page + '」· ' : '') + (item.line ? '第 ' + item.line + ' 行 · ' : '') + (item.message || '运行失败');
+          body.appendChild(d);
+        };
+        if (isMulti) {
+          /* M5 · 多页面应用：沙箱内 Router 路由 */
+          const startName = app.startPageName
+            || (app.pages.find(p => p.id === app.startPageId) || app.pages[0]).name;
+          NS.sandbox.mountMultiApp(
+            body,
+            app.pages.map(p => ({ name: p.name, code: p.code })),
+            startName,
+            { error: () => {}, fatal: onFatal },
+            NS.sandbox.readTheme()
+          );
+        } else {
+          NS.sandbox.mountApp(body, app.code, {
+            error: () => {},
+            fatal: onFatal
+          }, NS.sandbox.readTheme());
+        }
       }
     };
     return id;

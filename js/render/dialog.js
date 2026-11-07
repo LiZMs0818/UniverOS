@@ -1,54 +1,55 @@
 /* ============================================================
    Universe OS · 渲染层 · dialog.js
-   模态对话框：promptDialog / confirmDialog（声明式构建，Promise 返回）
+   确认 / 输入对话框：统一走系统级对话框 API（NS.system.winman.openDialog），
+   不再自绘遮罩弹窗——对话框是隶属于调用应用的系统窗口，无背景压暗。
    ============================================================ */
 (function (G) {
   'use strict';
   const NS = (G.UniverOS = G.UniverOS || {});
   NS.render = NS.render || {};
-  const h = NS.render.h;
-  const { MiniButton } = NS.render.controls;
 
-  function promptDialog(title, def) {
-    def = def === undefined ? '' : def;
-    return new Promise(resolve => {
-      let inputEl = null;
-      const overlay = NS.render.createElement(h('div', { className: 'modal-overlay' }, [
-        h('div', { className: 'modal-box' }, [
-          h('div', { className: 'modal-title' }, title),
-          h('input', { className: 'modal-input', type: 'text', value: def, spellcheck: 'false', ref: el => (inputEl = el) }),
-          h('div', { className: 'modal-actions' }, [
-            MiniButton({ label: '取消', onClick: () => close(null) }),
-            MiniButton({ label: '确定', primary: true, onClick: () => close(inputEl.value.trim()) })
-          ])
-        ])
-      ]));
-      document.body.appendChild(overlay);
-      const close = v => { overlay.remove(); resolve(v); };
-      setTimeout(() => { inputEl.focus(); inputEl.select(); }, 60);
-      overlay.addEventListener('pointerdown', e => { if (e.target === overlay) close(null); });
-      inputEl.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); close(inputEl.value.trim()); }
-        if (e.key === 'Escape') { e.preventDefault(); close(null); }
-      });
-    });
+  function sysDialog() {
+    const wm = NS.system && NS.system.winman;
+    return (wm && typeof wm.openDialog === 'function') ? wm : null;
   }
 
-  function confirmDialog(title) {
-    return new Promise(resolve => {
-      const overlay = NS.render.createElement(h('div', { className: 'modal-overlay' }, [
-        h('div', { className: 'modal-box' }, [
-          h('div', { className: 'modal-msg' }, title),
-          h('div', { className: 'modal-actions' }, [
-            MiniButton({ label: '取消', onClick: () => close(false) }),
-            MiniButton({ label: '确定', primary: true, onClick: () => close(true) })
-          ])
-        ])
-      ]));
-      document.body.appendChild(overlay);
-      const close = v => { overlay.remove(); resolve(v); };
-      overlay.addEventListener('pointerdown', e => { if (e.target === overlay) close(false); });
-    });
+  /* 确认对话框 → Promise<boolean> */
+  function confirmDialog(title, opts) {
+    opts = opts || {};
+    const wm = sysDialog();
+    if (!wm) return Promise.resolve(false);
+    const danger = opts.danger !== false;
+    return wm.openDialog({
+      owner: opts.owner,
+      title: opts.title || '确认操作',
+      message: title,
+      detail: opts.detail || '',
+      width: opts.width || 380,
+      danger: danger,
+      buttons: [
+        { label: opts.cancelLabel || '取消', value: false },
+        { label: opts.okLabel || '确定', value: true, primary: true, danger: danger }
+      ]
+    }).then(function (v) { return v === true; });
+  }
+
+  /* 输入对话框 → Promise<string|null> */
+  function promptDialog(title, def, opts) {
+    opts = opts || {};
+    const wm = sysDialog();
+    if (!wm) return Promise.resolve(null);
+    return wm.openDialog({
+      owner: opts.owner,
+      title: opts.title || title,
+      message: opts.message || '',
+      input: true,
+      value: def === undefined ? '' : def,
+      width: opts.width || 380,
+      buttons: [
+        { label: opts.cancelLabel || '取消', value: null },
+        { label: opts.okLabel || '确定', value: true, primary: true }
+      ]
+    }).then(function (v) { return (typeof v === 'string') ? v : null; });
   }
 
   NS.render.promptDialog = promptDialog;

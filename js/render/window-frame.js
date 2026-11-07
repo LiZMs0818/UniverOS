@@ -20,10 +20,17 @@
       createdAt: Date.now()
     };
 
+    /* 交通灯图标：指针靠近整组时三枚同时浮现（macOS 行为） */
+    const SVG = (d) => '<svg class="tl-glyph" viewBox="0 0 12 12" fill="none" stroke="currentColor"'
+      + ' stroke-width="1.3" stroke-linecap="round">' + d + '</svg>';
     const trafficBtns = [
-      h('button', { className: 'tl close', ref: el => (frame.btnClose = el) }),
-      h('button', { className: 'tl min', ref: el => (frame.btnMin = el) }),
-      h('button', { className: 'tl max', ref: el => (frame.btnMax = el) })
+      h('button', { className: 'tl close', ref: el => (frame.btnClose = el),
+        html: SVG('<path d="M3.6 3.6 L8.4 8.4"/><path d="M8.4 3.6 L3.6 8.4"/>') }),
+      h('button', { className: 'tl min', ref: el => (frame.btnMin = el),
+        html: SVG('<path d="M3.2 6 H8.8"/>') }),
+      h('button', { className: 'tl max', ref: el => (frame.btnMax = el),
+        html: SVG('<path d="M6.6 6.6 L8.9 4.3"/><path d="M6.6 4.3 H8.9 V6.6"/>'
+          + '<path d="M5.4 5.4 L3.1 7.7"/><path d="M5.4 7.7 H3.1 V5.4"/>') })
     ];
 
     let vnode;

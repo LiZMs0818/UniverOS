@@ -70,17 +70,25 @@ html.forced-landscape #statusbar{transform:rotate(90deg);transform-origin:0 0;le
   backdrop-filter:blur(32px) saturate(180%);-webkit-backdrop-filter:blur(32px) saturate(180%);
   box-shadow:var(--shadow),0 0 0 1px var(--border);transition:box-shadow .2s,border-radius .2s}
 .window.focused{box-shadow:0 30px 80px rgba(0,0,0,.65),0 0 0 1px var(--border-strong)}
-.window.entering{animation:winIn .42s cubic-bezier(.22,1,.36,1) both}
-@keyframes winIn{0%{opacity:0;transform:scale(.08)}50%{opacity:1}76%{transform:scale(1.016)}100%{opacity:1;transform:scale(1)}}
-.window.closing,.window.minimizing{animation:winOut .3s cubic-bezier(.4,0,.6,1) forwards;pointer-events:none}
-@keyframes winOut{0%{opacity:1;transform:scale(1)}30%{transform:scale(1.022)}100%{opacity:0;transform:scale(.08)}}
+.window.entering{animation:winIn .30s cubic-bezier(.2,.85,.25,1) both}
+/* 开启：从锚点明显放大 + 淡入，行程与收起对称，回弹不超过 1 */
+@keyframes winIn{0%{opacity:0;transform:scale(.72)}100%{opacity:1;transform:scale(1)}}
+.window.closing,.window.minimizing{animation:winOut .30s cubic-bezier(.45,0,.78,.3) forwards;pointer-events:none}
+/* 收起：先轻微一顿再加速缩向锚点（Dock 图标优先），等价 macOS 的“缩放”最小化效果 */
+@keyframes winOut{0%{opacity:1;transform:scale(1)}18%{opacity:1;transform:scale(.96)}100%{opacity:0;transform:scale(.16)}}
 
 .win-bar{flex:0 0 42px;height:42px;display:flex;align-items:center;gap:12px;padding:0 12px;
   background:transparent;border-bottom:1px solid var(--border);touch-action:none;cursor:default}
-.traffic{display:flex;align-items:center;justify-content:center;gap:8px;flex:0 0 auto;position:relative;color:#fff}
+.traffic{display:flex;align-items:center;justify-content:center;gap:9px;flex:0 0 auto;position:relative;color:#fff}
 html[data-mode="light"] .traffic{color:#1a1a1f}
-.tl{width:12px;height:12px;border-radius:50%;border:none;padding:0;cursor:pointer;position:relative;transition:background .15s,width .2s,height .2s,opacity .18s}
+.tl{width:15px;height:15px;border-radius:50%;border:none;padding:0;cursor:pointer;position:relative;
+  display:flex;align-items:center;justify-content:center;transition:background .15s,width .2s,height .2s,opacity .18s}
 .tl::after{content:'';position:absolute;inset:-9px}
+.tl-glyph{display:block;width:11px;height:11px;opacity:0;transition:opacity .12s ease;pointer-events:none}
+.tl.close .tl-glyph{color:#7d0d05}
+.tl.min .tl-glyph{color:#96620a}
+.tl.max .tl-glyph{color:#0a5a13}
+.traffic:hover .tl-glyph{opacity:1}
 .tl.close{background:#ff5f57}.tl.min{background:#febc2e}.tl.max{background:#28c840}
 .window:not(.focused) .tl.close,.window:not(.focused) .tl.min,.window:not(.focused) .tl.max{background:#8e8e93}
 .win-title{font-size:13px;font-weight:600;color:var(--text-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}

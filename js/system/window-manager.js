@@ -14,22 +14,208 @@
   const wins = [];
   let zTop = 10, activeWin = null;
 
-  function findIconEl(appId) {
+  /* 最近一次指针位置：窗口从“点下去的地方”弹出，而不是从远处的桌面图标弹出 */
+  let lastPointer = null;
+  window.addEventListener('pointerdown', function (e) {
+    lastPointer = { x: e.clientX, y: e.clientY, t: Date.now() };
+  }, true);
+  function freshPointer() {
+    if (!lastPointer) return null;
+    return (Date.now() - lastPointer.t > 1500) ? null : { x: lastPointer.x, y: lastPointer.y };
+  }
+  function winCenter(w) {
+    const wx = parseFloat(w.el.style.left) || 0, wy = parseFloat(w.el.style.top) || 0;
+    return { x: wx + (parseFloat(w.el.style.width) || 0) / 2, y: wy + (parseFloat(w.el.style.height) || 0) / 2 };
+  }
+
+  /* 同一应用可能同时有桌面图标和 Dock 图标：按给定位置取最近的那个 */
+  function iconElsFor(appId) {
+    const out = [];
     const idx = NS.system.layout.desktopIcons.findIndex(i => i.appId === appId);
     if (idx >= 0) {
       const el = NS.system.iconsLayer.children[idx];
-      if (el) return el;
+      if (el) out.push(el);
     }
-    return NS.system.dock.dockInner.querySelector('[data-app="' + appId + '"]');
+    const d = NS.system.dock.dockInner.querySelector('[data-app="' + appId + '"]');
+    if (d) out.push(d);
+    return out;
   }
-  function animateIcon(appId, mode) {
-    const el = findIconEl(appId);
+  function findIconEl(appId, point) {
+    const els = iconElsFor(appId);
+    if (!els.length) return null;
+    if (!point) return els[0];
+    let best = els[0], bestD = Infinity;
+    els.forEach(function (el) {
+      const r = el.getBoundingClientRect();
+      const dx = r.left + r.width / 2 - point.x, dy = r.top + r.height / 2 - point.y;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = el; }
+    });
+    return best;
+  }
+  function popIcon(el, mode) {
     if (!el) return;
     const cls = mode === 'out' ? 'icon-pop-out' : 'icon-pop-in';
     el.classList.remove('icon-pop-out', 'icon-pop-in');
     void el.offsetWidth;
     el.classList.add(cls);
     setTimeout(() => el.classList.remove(cls), 560);
+  }
+  function animateIcon(appId, mode, point) {
+    popIcon(findIconEl(appId, point), mode);
+  }
+
+  /* 关闭/最小化的收缩目标：Dock 图标优先，其次主屏幕图标，都没有就落到屏幕正下方（Dock 所在带） */
+  function findCloseEl(appId) {
+    const d = NS.system.dock.dockInner.querySelector('[data-app="' + appId + '"]');
+    if (d) return d;
+    const idx = NS.system.layout.desktopIcons.findIndex(i => i.appId === appId);
+    if (idx >= 0) {
+      const el = NS.system.iconsLayer.children[idx];
+      if (el) return el;
+    }
+    return null;
+  }
+  function centerOf(el) {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+  function closeAnchorFor(appId) {
+    const el = findCloseEl(appId);
+    if (el) return centerOf(el);
+    const W = NS.system.deskEl.clientWidth, H = NS.system.deskEl.clientHeight;
+    return { x: W / 2, y: H + 10 };
+  }
+
+  /* ---------- 系统级对话框窗口（隶属于调用它的应用） ----------
+     openDialog({owner,title,message,detail,input,value,width,height,modal,danger,buttons})
+     返回 Promise，值为所点按钮的 value（关闭/✕ 为 null，确认类为 true/false）。
+     modal:true 的对话框未处理完时，所属应用窗口不允许关闭/最小化（会闪烁提示）。 */
+  function buildDialogBody(body, args) {
+    const h = NS.render.h;
+    const kids = [];
+    if (args.message) kids.push(h('div', { className: 'dlg-msg' }, args.message));
+    if (args.detail) kids.push(h('div', { className: 'dlg-detail' }, args.detail));
+    let inputEl = null;
+    if (args.input) {
+      kids.push(h('input', {
+        className: 'dlg-input', type: 'text', value: args.value || '', spellcheck: 'false',
+        ref: el => (inputEl = el)
+      }));
+    }
+    const btns = (args.buttons || []).map(function (b) {
+      return h('button', {
+        className: 'mini-btn' + (b.primary ? ' primary' : '') + (b.danger ? ' danger' : ''),
+        onclick: () => args.onChoice(b.value)
+      }, b.label);
+    });
+    kids.push(h('div', { className: 'dlg-actions' }, btns));
+    body.appendChild(NS.render.createElement(h('div', { className: 'dlg' }, kids)));
+    args.getInput = () => (inputEl ? inputEl.value.trim() : '');
+    if (inputEl) {
+      setTimeout(() => { try { inputEl.focus(); inputEl.select(); } catch (e) {} }, 60);
+      inputEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); args.onChoice(true); }
+        if (e.key === 'Escape') { e.preventDefault(); args.onChoice(null); }
+      });
+    }
+  }
+  function ensureDialogApp() {
+    if (!NS.apps || !NS.apps.APPS) return false;
+    if (NS.apps.APPS.__dialog) return true;
+    NS.apps.APPS.__dialog = {
+      id: '__dialog', name: '提示', hidden: true, multi: true,
+      build: function (body, args) { buildDialogBody(body, args); }
+    };
+    return true;
+  }
+  function flashDialog(w) {
+    if (!w) return;
+    w.el.classList.remove('attention');
+    void w.el.offsetWidth;
+    w.el.classList.add('attention');
+    clearTimeout(w._attTimer);
+    w._attTimer = setTimeout(() => w.el.classList.remove('attention'), 1300);
+    focusWin(w);
+  }
+  function closeDialog(w, value) {
+    if (!w || w._dlgDone) return;
+    w._dlgDone = true;
+    const i = wins.indexOf(w);
+    if (i >= 0) wins.splice(i, 1);
+    if (activeWin === w) activeWin = null;
+    w.el.classList.remove('entering', 'minimizing', 'attention');
+    w.el.classList.add('closing');
+    setTimeout(() => { if (w.el.parentNode) w.el.remove(); }, 320);
+    if (w.resolve) { try { w.resolve(value); } catch (e) {} }
+    NS.system.dock.scheduleDockCheck();
+    const back = w.owner && wins.find(x => x.appId === w.owner && !x.min);
+    if (back) setTimeout(() => focusWin(back), 80);
+  }
+  function modalChildrenOf(appId) {
+    return wins.filter(x => x.owner === appId && x.dialog && x.modal && !x._dlgDone);
+  }
+  /* 级联关闭隶属的对话框：只回收 dialog 子窗，普通子窗（预览等）保持独立 */
+  function cascadeClose(appId) {
+    wins.filter(x => x.owner === appId && x.dialog && !x._dlgDone).forEach(function (k) {
+      cascadeClose(k.appId);
+      closeDialog(k, null);
+    });
+  }
+  function openDialog(opts) {
+    if (!ensureDialogApp()) return Promise.resolve(null);
+    const o = opts || {};
+    const caller = (activeWin && !activeWin.dialog && activeWin.appId !== '__dialog') ? activeWin : null;
+    const owner = o.owner !== undefined ? o.owner : (caller ? caller.appId : null);
+    let resolveFn = null;
+    const promise = new Promise(function (r) { resolveFn = r; });
+    const args = {
+      title: o.title || '提示',
+      message: o.message || '',
+      detail: o.detail || '',
+      input: !!o.input,
+      value: o.value || '',
+      buttons: o.buttons || [
+        { label: '取消', value: false },
+        { label: '确定', value: true, primary: true, danger: !!o.danger }
+      ],
+      onChoice: function (v) {
+        const out = (v === true && args.input && args.getInput) ? args.getInput() : v;
+        closeDialog(dlgW, out);
+      }
+    };
+    const dlgW = openApp('__dialog', args);
+    if (!dlgW) return promise;
+    dlgW.dialog = true;
+    dlgW.modal = o.modal !== false;
+    dlgW.owner = owner || null;
+    dlgW.resolve = resolveFn;
+    dlgW.el.classList.add('dialog');
+
+    const tEl = dlgW.el.querySelector('.win-title');
+    if (tEl) tEl.textContent = args.title;
+
+    const W = NS.system.deskEl.clientWidth, H = NS.system.deskEl.clientHeight;
+    const dw = Math.min(o.width || 380, W - 32);
+    const dh = o.height || (args.input ? 196 : 172);
+    let dx = (W - dw) / 2, dy = (H - dh) / 3;
+    const ow = owner && wins.find(x => x.appId === owner && !x.dialog && !x._dlgDone);
+    if (ow) {
+      const ol = parseFloat(ow.el.style.left) || 0, ot = parseFloat(ow.el.style.top) || 0;
+      const owW = parseFloat(ow.el.style.width) || 0, owH = parseFloat(ow.el.style.height) || 0;
+      dx = ol + (owW - dw) / 2;
+      dy = ot + Math.min(150, Math.max(48, owH * 0.22));
+    }
+    dx = clamp(dx, 16, Math.max(16, W - dw - 16));
+    dy = clamp(dy, 34, Math.max(34, H - dh - 24));
+    dlgW.el.style.left = dx + 'px';
+    dlgW.el.style.top = dy + 'px';
+    dlgW.el.style.width = dw + 'px';
+    dlgW.el.style.height = dh + 'px';
+    dlgW.el.style.minWidth = '0';
+    dlgW.el.style.minHeight = '0';
+    focusWin(dlgW);
+    return promise;
   }
   function collapseAllTraffic(except) {
     wins.forEach(x => {
@@ -47,8 +233,8 @@
       height: parseInt(w.el.style.height) || 0
     });
   }
-  function findAnchorFor(appId) {
-    const el = findIconEl(appId);
+  function findAnchorFor(appId, point) {
+    const el = findIconEl(appId, point);
     if (el) {
       const r = el.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -63,7 +249,7 @@
   }
 
   /* ---------- 打开应用 ---------- */
-  function openApp(appId, args) {
+  function openApp(appId, args, opts) {
     NS.system.launcher.closeLauncher();
     const def = NS.apps.APPS[appId];
     if (!def) return;
@@ -82,8 +268,10 @@
         return exist;
       }
     }
-    animateIcon(appId, 'out');
-    const w = createWindow(appId, args);
+    const pt = freshPointer();
+    animateIcon(appId, 'out', pt);
+    const w = createWindow(appId, args, pt);
+    if (opts && opts.owner) { w.owner = opts.owner; w.dependent = true; }
     wins.push(w);
     focusWin(w);
     NS.system.dock.updateDockRunning();
@@ -92,7 +280,7 @@
   }
 
   /* ---------- 创建窗口 ---------- */
-  function createWindow(appId, args) {
+  function createWindow(appId, args, anchorPoint) {
     const app = NS.apps.APPS[appId];
     const { createWindowFrame } = NS.render.windowFrame;
 
@@ -133,7 +321,7 @@
     el.style.width = ww + 'px'; el.style.height = wh + 'px';
     winLayer.appendChild(el);
 
-    const anchor = findAnchorFor(appId);
+    const anchor = anchorPoint || findAnchorFor(appId);
     if (anchor) {
       const o = getOriginForAnchor(anchor, w);
       el.style.transformOrigin = o.x + 'px ' + o.y + 'px';
@@ -163,6 +351,11 @@
   function focusWin(w) {
     if (!w) return;
     if (w.min) restoreWin(w);
+    /* 隶属的模态对话框未处理完时，焦点强制留在对话框上 */
+    if (!w.dialog) {
+      const mod = wins.find(x => x.owner === w.appId && x.dialog && x.modal && !x._dlgDone);
+      if (mod) { focusWin(mod); return; }
+    }
     w.el.style.zIndex = ++zTop;
     wins.forEach(x => {
       x.el.classList.toggle('focused', x === w);
@@ -173,14 +366,17 @@
     });
     activeWin = w;
     const app = NS.apps.APPS[w.appId];
-    if (app) NS.system.statusbar.updateStatusBarAppName(app.name);
+    if (app) NS.system.statusbar.updateStatusBarAppName(w.dialog ? ((w.args && w.args.title) || app.name) : app.name);
   }
   function minimizeWin(w) {
-    if (w.min) return;
+    if (w.min || w.dialog) return;
+    const minBlockers = modalChildrenOf(w.appId);
+    if (minBlockers.length) { minBlockers.forEach(flashDialog); return; }
     if (w.snapped) { document.body.classList.remove('snap-active'); hideSnapPreview(); }
     w.min = true;
     if (w.fullscreen) exitFullscreen(w);
-    const a = findAnchorFor(w.appId);
+    const ptMin = closeAnchorFor(w.appId);
+    const a = ptMin;
     if (a) {
       const o = getOriginForAnchor(a, w);
       w.el.style.transformOrigin = o.x + 'px ' + o.y + 'px';
@@ -188,7 +384,7 @@
     w.el.classList.remove('entering');
     void w.el.offsetWidth;
     w.el.classList.add('minimizing');
-    animateIcon(w.appId, 'in');
+    popIcon(findCloseEl(w.appId), 'in');
     setTimeout(() => { if (w.min) { w.el.style.display = 'none'; w.el.classList.remove('minimizing'); } }, 310);
     if (activeWin === w) {
       const r = wins.filter(x => x !== w && !x.min);
@@ -202,7 +398,8 @@
     w.min = false;
     w.el.style.display = '';
     w.el.classList.remove('minimizing', 'entering');
-    const a = findAnchorFor(w.appId);
+    const ptRestore = freshPointer() || winCenter(w);
+    const a = findAnchorFor(w.appId, ptRestore);
     if (a) {
       const o = getOriginForAnchor(a, w);
       w.el.style.transformOrigin = o.x + 'px ' + o.y + 'px';
@@ -210,17 +407,25 @@
     void w.el.offsetWidth;
     w.el.classList.add('entering');
     setTimeout(() => w.el.classList.remove('entering'), 450);
-    animateIcon(w.appId, 'out');
+    animateIcon(w.appId, 'out', ptRestore);
     NS.system.dock.scheduleDockCheck();
   }
   function closeWin(w) {
+    if (!w) return;
+    if (w.dialog) { closeDialog(w, null); return; }
+    /* 隶属的模态对话框未处理完：拒绝关闭，闪烁对话框提示 */
+    const blockers = modalChildrenOf(w.appId);
+    if (blockers.length) { blockers.forEach(flashDialog); return; }
+    /* 关闭应用前，先把它隶属的窗口（预览窗等）一起关掉 */
+    cascadeClose(w.appId);
     if (w.snapped) { document.body.classList.remove('snap-active'); hideSnapPreview(); }
     const i = wins.indexOf(w);
     if (i >= 0) wins.splice(i, 1);
     if (w.fullscreen) exitFullscreen(w);
     saveWindowRect(w);
-    animateIcon(w.appId, 'in');
-    const a = findAnchorFor(w.appId);
+    const ptClose = closeAnchorFor(w.appId);
+    popIcon(findCloseEl(w.appId), 'in');
+    const a = ptClose;
     if (a) {
       const o = getOriginForAnchor(a, w);
       w.el.style.transformOrigin = o.x + 'px ' + o.y + 'px';
@@ -390,6 +595,7 @@
   NS.system.winman = {
     winLayer, wins, activeWin, zTop,
     openApp, createWindow, focusWin, minimizeWin, restoreWin, closeWin,
+    openDialog, closeDialog, modalChildrenOf, flashDialog,
     toggleMax, exitFullscreen, cycleWindows, saveWindowRect, findAnchorFor, animateIcon,
     snapWin, unsnapWin, openSwitcher, cycleSwitcher, closeSwitcher
   };

@@ -37,6 +37,22 @@
       h('button', { className: o.id === value ? 'active' : '', onclick: () => onChange(o.id, o) }, o.label)));
   }
 
+  /* 下拉选择（走系统菜单渲染层，不用原生 <select>；options = [[值, 文案], …]） */
+  function Select(options, value, onChange, opts) {
+    const o = opts || {};
+    const list = options || [];
+    const cur = list.filter(x => x[0] === value)[0] || list[0];
+    return h('button', {
+      type: 'button',
+      className: cls('ctx-select', o.className),
+      disabled: o.disabled,
+      onclick: e => NS.render.menu.dropdown(e.currentTarget, list, value, onChange)
+    }, [
+      h('span', { className: 'ctx-select-label' }, cur ? cur[1] : ''),
+      h('span', { className: 'ctx-select-caret' })
+    ]);
+  }
+
   /* 迷你按钮 */
   function MiniButton(opts) {
     return h('button', {
@@ -81,5 +97,5 @@
     }, opts.label);
   }
 
-  NS.render.controls = { cls, Switch, Slider, Seg, MiniButton, KVRow, SectionTitle, ListItem, ActionButton };
+  NS.render.controls = { cls, Switch, Slider, Seg, Select, MiniButton, KVRow, SectionTitle, ListItem, ActionButton };
 })(window);

@@ -8,7 +8,7 @@
   NS.render = NS.render || {};
   const esc = s => NS.core.utils.escapeHtml(s);
 
-  let menuLayers = [], menuAnchorEl = null;
+  let menuLayers = [], menuAnchorEl = null, lastClosedAnchor = null, lastClosedAt = 0;
 
   function clearMenuAnchor() {
     if (menuAnchorEl && menuAnchorEl.isConnected) menuAnchorEl.classList.remove('menu-anchor');
@@ -16,6 +16,7 @@
   }
   function isMenuOpen() { return menuLayers.length > 0; }
   function hideMenu() {
+    if (menuAnchorEl) { lastClosedAnchor = menuAnchorEl; lastClosedAt = Date.now(); }
     menuLayers.forEach(el => el.remove());
     menuLayers = [];
     clearMenuAnchor();
@@ -34,8 +35,9 @@
         return;
       }
       const b = document.createElement('div');
-      b.className = 'ctx-item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : '');
-      const inner = NS.render.h('span', { html: esc(it.label) });
+      b.className = 'ctx-item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : '') + (it.checked ? ' checked' : '');
+      const label = esc(it.label);
+      const inner = NS.render.h('span', { html: label });
       b.appendChild(NS.render.createElement(inner));
       if (it.children) {
         const arrow = document.createElement('span');
@@ -78,7 +80,7 @@
   function showMenu(x, y, items, anchorEl) {
     hideMenu();
     if (anchorEl && anchorEl.isConnected) { anchorEl.classList.add('menu-anchor'); menuAnchorEl = anchorEl; }
-    buildMenuLayer(items, x, y, null);
+    return buildMenuLayer(items, x, y, null);
   }
 
   document.addEventListener('pointerdown', function (e) {
@@ -87,5 +89,30 @@
     hideMenu();
   }, true);
 
-  NS.render.menu = { showMenu, hideMenu, isMenuOpen, clearMenuAnchor };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && isMenuOpen()) hideMenu();
+  }, true);
+
+  /* 下拉选择：锚在某个元素下方，走系统菜单渲染层（不用原生 <select>） */
+  function dropdown(anchorEl, options, value, onPick) {
+    if (!anchorEl) return;
+    /* 同一个触发器刚被外部点击关掉（这次的点击就是它）→ 视为开关切换，不再重开 */
+    if (lastClosedAnchor === anchorEl && Date.now() - lastClosedAt < 300) {
+      lastClosedAnchor = null;
+      return;
+    }
+    const r = anchorEl.getBoundingClientRect();
+    const items = (options || []).map(function (o) {
+      return {
+        label: o[1],
+        checked: o[0] === value,
+        action: function () { onPick(o[0]); }
+      };
+    });
+    showMenu(r.left, r.bottom + 6, items, anchorEl);
+    const el = document.querySelector('.ctxmenu-popup');
+    if (el) el.style.minWidth = Math.max(140, Math.round(r.width)) + 'px';
+  }
+
+  NS.render.menu = { showMenu, hideMenu, isMenuOpen, clearMenuAnchor, dropdown, anchor: () => menuAnchorEl };
 })(window);

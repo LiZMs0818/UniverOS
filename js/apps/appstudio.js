@@ -24,8 +24,27 @@
     "    return h('div', { style: 'padding:20px;' }, [",
     "      h('h1', { style: 'margin:0 0 10px;font-size:20px;' }, '你好，UniverOS'),",
     "      h('p', { style: 'margin:0 0 14px;color:var(--text-dim);' }, '这是你在 Universe Studio 里的第一个应用'),",
-    "      h('button', { className: 'as-btn', onclick: () => this.setState({ n: this.state.n + 1 }) },",
-    "        '点我 · 已点 ' + this.state.n + ' 次')",
+    "      h('div', { style: 'display:flex;gap:10px;' }, [",
+    "        h('button', { className: 'as-btn', onclick: () => this.setState({ n: this.state.n + 1 }) },",
+    "          '点我 · 已点 ' + this.state.n + ' 次'),",
+    "        h('button', { onclick: () => { if (typeof navigate === 'function') navigate('页面2'); } }, '打开页面2')",
+    "      ])",
+    '    ]);',
+    '  }',
+    '}'
+  ].join('\n');
+
+  /* M5 · 新增页面模板：演示 navigate 页面跳转（navigate 由多页运行时注入） */
+  const PAGE_TEMPLATE = [
+    'class Page2 extends Component {',
+    '  constructor(props) {',
+    '    super(props);',
+    '  }',
+    '  render() {',
+    "    return h('div', { style: 'padding:20px;' }, [",
+    "      h('h1', { style: 'margin:0 0 12px;font-size:20px;' }, '新页面'),",
+    "      h('p', { style: 'margin:0 0 14px;color:var(--text-dim);' }, '这是应用的第二个页面'),",
+    "      h('button', { className: 'as-btn', onclick: () => { if (typeof navigate === 'function') navigate('页面1'); } }, '回到首页')",
     '    ]);',
     '  }',
     '}'
@@ -116,7 +135,7 @@
       last = TOK_RE.lastIndex;
     }
     out += esc.slice(last);
-    return out.split('\n').map(l => '<span class="hl-line">' + (l || '') + '</span>').join('\n');
+    return out.split('\n').map(l => '<span class="hl-line">' + (l || '') + '</span>').join('');
   }
 
   function escAttr(v) {
@@ -131,14 +150,17 @@
       super(props);
       this._ta = null;
       this._nameInput = null;
-      this._previewEl = null;
       this._statusText = null;
       this._gutter = null;
       this._hl = null;
       this._mode = 'home';          // home | editor
-      this._apps = [];              // {id, name, code}
+      this._apps = [];              // {id, name, pages:[{id,name,code}], startPageId}
       this._current = null;         // 当前编辑的应用名
       this._currentId = null;       // 当前编辑的应用 id（保存改名时清理旧注册）
+      this._pages = [];             // M5 · 当前应用的页面数组
+      this._curPage = null;         // M5 · 当前编辑的页面对象
+      this._startPageId = null;     // M5 · 开始页 id
+      this._pageMenu = null;        // M5 · 页面标签的右键菜单
       this._runHandle = null;       // 当前沙箱句柄（kill 用）
       this._selStart = 0;           // M4 · 编辑器光标选区快照（代码块插入点）
       this._selEnd = 0;
@@ -168,7 +190,28 @@
           try {
             const blob = await NS.core.fs.readBlob('/apps/' + it.name);
             const def = JSON.parse(await blob.text());
-            if (def && typeof def.code === 'string') this._apps.push({ id: def.id || 'userapp-' + def.name, name: def.name, code: def.code });
+            if (!def) continue;
+            if (Array.isArray(def.pages) && def.pages.length) {
+              /* M5 · 多页面格式（v2）；M6 · 页面可带 mode/ui（可视化构建器） */
+              this._apps.push({
+                id: def.id || 'userapp-' + def.name,
+                name: def.name,
+                pages: def.pages.map(p => ({
+                  id: p.id, name: p.name, code: p.code,
+                  mode: p.mode === 'ui' ? 'ui' : 'code',
+                  ui: Array.isArray(p.ui) ? p.ui : []
+                })),
+                startPageId: def.startPageId || def.pages[0].id
+              });
+            } else if (typeof def.code === 'string') {
+              /* 旧单页格式：迁移为单页面结构 */
+              this._apps.push({
+                id: def.id || 'userapp-' + def.name,
+                name: def.name,
+                pages: [{ id: 'p1', name: '页面1', code: def.code, mode: 'code', ui: [] }],
+                startPageId: 'p1'
+              });
+            }
           } catch (e) { /* 跳过损坏文件 */ }
         }
       } catch (e) { this._apps = []; }
@@ -184,6 +227,7 @@
     _buildHome() {
       this._mode = 'home';
       this._closeSnip();
+      this._closePageMenu();
       const root = this._root;
       const bar = root.querySelector('.as-toolbar');
       const main = root.querySelector('.as-main');
@@ -211,7 +255,7 @@
         '<div class="as-app-card" data-i="' + i + '">'
         + '<button class="as-card-main">'
         +   '<span class="as-app-name">' + escAttr(a.name) + '</span>'
-        +   '<span class="as-app-meta">Component 应用 · 点击打开</span>'
+        +   '<span class="as-app-meta">' + (a.pages.length > 1 ? a.pages.length + ' 页面 · ' : '') + 'Component 应用 · 点击打开</span>'
         + '</button>'
         + '<span class="as-card-ops">'
         +   '<button class="as-card-op" data-op="rename">重命名</button>'
@@ -234,10 +278,18 @@
       const name = await NS.render.promptDialog('重命名应用', app.name);
       if (!name || name === app.name) return;
       try {
-        NS.apps.compileApp(app.code); /* 代码无需重编译，仅校验有效性 */
+        app.pages.forEach(p => NS.apps.compileApp(p.code)); /* 逐页校验有效性 */
         NS.system.winman.wins.slice().forEach(w => { if (w.appId === app.id) NS.system.winman.closeWin(w); });
         await NS.core.fs.remove('/apps/' + app.name + '.uapp');
-        const def = { id: 'userapp-' + name, name, code: app.code, updatedAt: Date.now() };
+        const def = {
+          id: 'userapp-' + name, name, v: 2,
+          pages: app.pages.map(p => ({
+            id: p.id, name: p.name, code: p.code,
+            mode: p.mode === 'ui' ? 'ui' : 'code',
+            ui: Array.isArray(p.ui) ? p.ui : []
+          })),
+          startPageId: app.startPageId, updatedAt: Date.now()
+        };
         await NS.core.fs.write('/apps/' + name + '.uapp', new Blob([JSON.stringify(def, null, 2)], { type: 'application/json' }));
         NS.apps.unregisterDynamic(app.id);
         NS.apps.registerDynamic(def);
@@ -272,7 +324,9 @@
     _newApp() {
       this._current = '我的应用';
       this._currentId = null;
-      this._editingCode = TEMPLATE;
+      this._pages = [{ id: 'p1', name: '页面1', code: TEMPLATE, mode: 'code', ui: [] }];
+      this._startPageId = 'p1';
+      this._curPage = this._pages[0];
       this._buildEditor();
     }
 
@@ -281,7 +335,23 @@
       if (!app) return;
       this._current = app.name;
       this._currentId = app.id;
-      this._editingCode = app.code;
+      this._pages = app.pages.map(p => {
+        const pg = {
+          id: p.id, name: p.name, code: p.code,
+          mode: p.mode === 'ui' ? 'ui' : 'code',
+          ui: Array.isArray(p.ui) ? p.ui : []
+        };
+        if (pg.mode === 'ui') {
+          const parsed = NS.apps.appstudioUI.parseCode(pg.code || '');
+          if (parsed.ok) {
+            pg.uiSrc = parsed.uiSrc;
+            if (!pg.ui.length) pg.ui = parsed.nodes;
+          }
+        }
+        return pg;
+      });
+      this._startPageId = app.startPageId || this._pages[0].id;
+      this._curPage = this._pages.find(p => p.id === this._startPageId) || this._pages[0];
       this._buildEditor();
       this.setStatus('as-ok', '已打开「' + app.name + '」· 修改后点「保存」');
     }
@@ -294,43 +364,32 @@
       const main = root.querySelector('.as-main');
       bar.innerHTML = ''
         + '<input class="as-name" placeholder="应用名称" value="' + escAttr(this._current || '') + '" spellcheck="false">'
+        + '<div class="as-modes">'
+        +   '<button class="as-mode" data-mode="code">代码</button>'
+        +   '<button class="as-mode" data-mode="ui">可视化</button>'
+        + '</div>'
         + '<span style="flex:1"></span>'
         + '<button class="as-snip-open">代码块</button>'
         + '<button class="as-back">返回</button>'
         + '<button class="as-run">运行</button>'
         + '<button class="as-save">保存</button>';
       main.innerHTML = ''
-        + '<div class="as-pane">'
-        +   '<div class="as-pane-head"><span>代码</span><button class="as-reset">重置模板</button></div>'
-        +   '<div class="as-codebox">'
-        +     '<pre class="as-gutter"></pre>'
-        +     '<div class="as-editwrap">'
-        +       '<pre class="as-highlight" aria-hidden="true"></pre>'
-        +       '<textarea class="as-editor" spellcheck="false"></textarea>'
-        +     '</div>'
+        + '<div class="as-pagetabs"></div>'
+        + '<div class="as-codebox">'
+        +   '<pre class="as-gutter"></pre>'
+        +   '<div class="as-editwrap">'
+        +     '<pre class="as-highlight" aria-hidden="true"></pre>'
+        +     '<textarea class="as-editor" spellcheck="false" wrap="off"></textarea>'
         +   '</div>'
         + '</div>'
-        + '<div class="as-pane">'
-        +   '<div class="as-pane-head"><span>实时预览</span><button class="as-debug-toggle">调试</button></div>'
-        +   '<div class="as-preview"><div class="as-empty">点击「运行」生成预览</div></div>'
-        +   '<div class="as-debug" hidden>'
-        +     '<div class="as-debug-head"><span>运行日志</span>'
-        +       '<span style="flex:1"></span>'
-        +       '<button class="as-debug-clear">清空</button>'
-        +       '<button class="as-debug-kill">终止</button></div>'
-        +     '<div class="as-debug-list"></div>'
-        +   '</div>'
-        + '</div>';
+        + '<div class="as-ub"></div>';
 
       this._ta = main.querySelector('.as-editor');
       this._nameInput = bar.querySelector('.as-name');
-      this._previewEl = main.querySelector('.as-preview');
-      this._debugBox = main.querySelector('.as-debug');
-      this._debugList = main.querySelector('.as-debug-list');
       this._gutter = main.querySelector('.as-gutter');
       this._hl = main.querySelector('.as-highlight');
-      this._ta.value = this._editingCode || TEMPLATE;
-      this._editingCode = null;
+      this._tabsEl = main.querySelector('.as-pagetabs');
+      this._ta.value = (this._curPage ? this._curPage.code : TEMPLATE);
 
       this._ta.addEventListener('input', () => this._syncEditor());
       this._ta.addEventListener('scroll', () => {
@@ -343,19 +402,251 @@
       this._ta.addEventListener('mouseup', () => this._syncSel());
       this._snipBtn = bar.querySelector('.as-snip-open');
       if (this._snipBtn) this._snipBtn.addEventListener('click', () => this._toggleSnippets());
+      bar.querySelectorAll('.as-mode').forEach(btn => {
+        btn.addEventListener('click', () => this._setPageMode(btn.dataset.mode));
+      });
       bar.querySelector('.as-back').addEventListener('click', () => this._buildHome());
       bar.querySelector('.as-run').addEventListener('click', () => this.run());
       bar.querySelector('.as-save').addEventListener('click', () => this.save());
-      main.querySelector('.as-reset').addEventListener('click', () => this.reset());
-      main.querySelector('.as-debug-toggle').addEventListener('click', () => { if (this._debugBox) this._debugBox.hidden = !this._debugBox.hidden; });
-      main.querySelector('.as-debug-clear').addEventListener('click', () => { if (this._debugList) this._debugList.innerHTML = ''; });
-      main.querySelector('.as-debug-kill').addEventListener('click', () => {
-        this._killRun();
-        if (this._previewEl) this._previewEl.innerHTML = '<div class="as-empty">已终止 · 点击「运行」重新启动</div>';
-        this.setStatus('as-ok', '已终止沙箱运行');
+      this._renderPageTabs();
+      this._applyMode();
+    }
+
+    /* ---------- M6 · 页面模式：代码 / 可视化 ---------- */
+    async _setPageMode(mode) {
+      const page = this._curPage;
+      if (!page || page.mode === mode) return;
+      this._syncCurrentPage();
+      if (mode === 'ui') {
+        /* 反向读回：把 render() 里的 h(...) 变成组件树，读不出的片段原样保留，
+           不清空、不弹确认框，代码只在被改动时才重排 */
+        const parsed = NS.apps.appstudioUI.parseCode(page.code || '');
+        if (!parsed.ok) {
+          NS.render.toast('这页代码暂时读不回画布：' + (parsed.reason || '结构不识别') + '（代码没动）');
+          this.setStatus('as-err', '✕ 无法读回画布 · 代码保持原样');
+          return;
+        }
+        page.ui = parsed.nodes;
+        page.uiSrc = parsed.uiSrc;
+        page.mode = 'ui';
+      } else {
+        page.mode = 'code';
+      }
+      this._applyMode();
+      this._renderPageTabs();
+      const rawCount = page.mode === 'ui' ? page.ui.filter(n => n.type === 'raw').length : 0;
+      this.setStatus('as-ok', mode === 'ui'
+        ? ('可视化模式 · ' + page.ui.length + ' 个组件' + (rawCount ? ' · ' + rawCount + ' 段原代码保留' : ''))
+        : ('代码模式 · 页面「' + page.name + '」'));
+    }
+
+    /* 按当前页模式切换主区，并挂载可视化构建器 */
+    _applyMode() {
+      const page = this._curPage;
+      if (!page || !this._root) return;
+      const mode = page.mode === 'ui' ? 'ui' : 'code';
+      const codebox = this._root.querySelector('.as-codebox');
+      const ubBox = this._root.querySelector('.as-ub');
+      const snipBtn = this._root.querySelector('.as-snip-open');
+      const holders = this._root.querySelectorAll('.as-mode');
+      holders.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      if (codebox) codebox.style.display = mode === 'ui' ? 'none' : 'flex';
+      if (ubBox) ubBox.style.display = mode === 'ui' ? 'flex' : 'none';
+      if (snipBtn) snipBtn.style.display = mode === 'ui' ? 'none' : '';
+      this._ubHandle = null;
+      if (mode === 'ui') {
+        if (!page.uiSrc) {
+          const parsed = NS.apps.appstudioUI.parseCode(page.code || '');
+          if (parsed.ok) page.uiSrc = parsed.uiSrc;
+        }
+        page.code = NS.apps.appstudioUI.genCode(page);
+        if (this._ta) { this._ta.readOnly = true; this._ta.value = page.code; }
+        this._syncEditor();
+        if (ubBox) {
+          this._ubHandle = NS.apps.appstudioUI.mount(ubBox, {
+            page: page,
+            pages: this._pages,
+            onChange: (p) => {
+              if (this._ta) { this._ta.value = p.code; }
+              this._syncEditor();
+              this.setStatus('as-ok', '✓ 已更新「' + p.name + '」· 点「运行」看效果');
+            }
+          });
+        }
+      } else {
+        if (this._ta) {
+          this._ta.readOnly = false;
+          this._ta.value = page.code;
+          this._syncEditor();
+        }
+      }
+    }
+
+    /* ---------- M5 · 页面标签栏 ---------- */
+    _syncCurrentPage() {
+      if (this._ta && this._curPage && this._curPage.mode !== 'ui') this._curPage.code = this._ta.value;
+    }
+
+    _renderPageTabs() {
+      const box = this._tabsEl;
+      if (!box) return;
+      box.innerHTML = this._pages.map(p =>
+        '<div class="as-ptab' + (p.id === this._curPage.id ? ' active' : '') + '" data-pid="' + escAttr(p.id) + '">'
+        + (p.id === this._startPageId ? '<span class="as-ptab-dot" title="开始页"></span>' : '')
+        + '<span class="as-ptab-name">' + escAttr(p.name) + '</span>'
+        + '</div>'
+      ).join('') + '<button class="as-ptab-add" title="新建页面">+</button>';
+      box.querySelectorAll('.as-ptab').forEach(tab => {
+        const pid = tab.dataset.pid;
+        tab.addEventListener('click', () => {
+          if (this._lpAt && Date.now() - this._lpAt < 700) return; /* 长按已弹菜单，不再切页 */
+          this._switchPage(pid);
+        });
+        /* 桌面右键 / 移动长按 → 页面操作菜单 */
+        tab.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          if (this._lpAt && Date.now() - this._lpAt < 700) return;
+          this._openPageMenu(tab, pid, e.clientX, e.clientY);
+        });
+        tab.addEventListener('pointerdown', (e) => {
+          if (e.pointerType === 'mouse') return;
+          this._clearLp();
+          this._lpStart = { x: e.clientX, y: e.clientY };
+          this._lpTimer = setTimeout(() => {
+            this._lpTimer = null;
+            this._lpAt = Date.now();
+            this._openPageMenu(tab, pid, this._lpStart.x, this._lpStart.y);
+          }, 480);
+        });
+        tab.addEventListener('pointermove', (e) => {
+          if (!this._lpTimer || !this._lpStart) return;
+          if (Math.abs(e.clientX - this._lpStart.x) > 10 || Math.abs(e.clientY - this._lpStart.y) > 10) this._clearLp();
+        });
+        tab.addEventListener('pointerup', () => this._clearLp());
+        tab.addEventListener('pointercancel', () => this._clearLp());
+        tab.addEventListener('pointerleave', () => this._clearLp());
       });
-      this._syncEditor();
-      this.setStatus('as-ok', '✓ 就绪 · 点击「运行」生成预览');
+      box.querySelector('.as-ptab-add').addEventListener('click', () => this._addPage());
+    }
+
+    _clearLp() {
+      if (this._lpTimer) { clearTimeout(this._lpTimer); this._lpTimer = null; }
+    }
+
+    _switchPage(pid) {
+      if (this._curPage.id === pid) return;
+      const target = this._pages.find(p => p.id === pid);
+      if (!target) return;
+      this._syncCurrentPage();
+      this._curPage = target;
+      this._applyMode();
+      this._renderPageTabs();
+      this.setStatus('as-ok', '已切换到页面「' + target.name + '」');
+    }
+
+    async _addPage() {
+      const defaultName = '页面' + (this._pages.length + 1);
+      const name = await NS.render.promptDialog('新页面名称', defaultName);
+      if (!name) return;
+      if (this._pages.some(p => p.name === name)) { NS.render.toast('已存在同名页面'); return; }
+      const id = 'p' + Date.now().toString(36);
+      const mode = (this._curPage && this._curPage.mode === 'ui') ? 'ui' : 'code';
+      const page = { id, name, code: PAGE_TEMPLATE, mode: mode, ui: [] };
+      if (mode === 'ui') page.code = NS.apps.appstudioUI.genCode(page);
+      this._syncCurrentPage();
+      this._pages.push(page);
+      this._curPage = page;
+      this._applyMode();
+      this._renderPageTabs();
+      this.setStatus('as-ok', '已新建页面「' + name + '」' + (mode === 'ui' ? ' · 空画布，从左侧加组件' : ' · 点「运行」可测试页面跳转'));
+    }
+
+    async _renamePage(pid) {
+      const page = this._pages.find(p => p.id === pid);
+      if (!page) return;
+      const name = await NS.render.promptDialog('重命名页面', page.name);
+      if (!name || name === page.name) return;
+      if (this._pages.some(p => p.name === name && p.id !== pid)) { NS.render.toast('已存在同名页面'); return; }
+      /* 同步改写其它页面里的跳转代码，避免改名后 navigate('旧名') 失效 */
+      let patched = 0;
+      const oldKeys = ["navigate('" + page.name + "'", 'navigate("' + page.name + '"'];
+      const newVals = ["navigate('" + name + "'", 'navigate("' + name + '"'];
+      this._syncCurrentPage();
+      this._pages.forEach(p => {
+        oldKeys.forEach((k, ki) => {
+          if (p.code.indexOf(k) >= 0) { p.code = p.code.split(k).join(newVals[ki]); patched++; }
+        });
+      });
+      page.name = name;
+      if (this._curPage.id === pid) this._applyMode();
+      this._renderPageTabs();
+      this.setStatus('as-ok', '页面已重命名为「' + name + '」' + (patched ? ' · 已同步跳转代码' : ''));
+    }
+
+    _setStartPage(pid) {
+      const page = this._pages.find(p => p.id === pid);
+      if (!page) return;
+      this._startPageId = pid;
+      this._renderPageTabs();
+      this.setStatus('as-ok', '开始页已设为「' + page.name + '」');
+    }
+
+    async _deletePage(pid) {
+      if (this._pages.length <= 1) { NS.render.toast('至少保留一个页面'); return; }
+      const page = this._pages.find(p => p.id === pid);
+      if (!page) return;
+      if (!(await NS.render.confirmDialog('删除页面「' + page.name + '」？'))) return;
+      const idx = this._pages.indexOf(page);
+      this._pages.splice(idx, 1);
+      if (this._startPageId === pid) this._startPageId = this._pages[0].id;
+      if (this._curPage.id === pid) {
+        this._curPage = this._pages[Math.max(0, idx - 1)];
+        this._ta.value = this._curPage.code;
+        this._syncEditor();
+      }
+      this._renderPageTabs();
+      this.setStatus('as-ok', '已删除页面「' + page.name + '」');
+    }
+
+    /* 页面操作菜单（复用系统 ctxmenu-popup）；x/y 为指针位置，缺省时贴标签右下角 */
+    _openPageMenu(btn, pid, x, y) {
+      this._closePageMenu();
+      const r = btn.getBoundingClientRect();
+      const menu = NS.render.createElement(NS.render.h('div', { className: 'ctxmenu-popup as-pagemenu' }));
+      document.body.appendChild(menu);
+      this._pageMenu = menu;
+      const items = [
+        ['重命名页面', () => this._renamePage(pid)],
+        ['设为开始页', () => this._setStartPage(pid)],
+        ['删除页面', () => this._deletePage(pid)]
+      ];
+      items.forEach(([label, action]) => {
+        const row = NS.render.createElement(NS.render.h('div', {
+          className: 'ctx-item' + (label === '删除页面' ? ' as-pagemenu-del' : ''),
+          onclick: action
+        }, label));
+        menu.appendChild(row);
+      });
+      menu.style.left = '0px'; menu.style.top = '0px';
+      const w = menu.offsetWidth, h = menu.offsetHeight;
+      let left = (typeof x === 'number') ? x : r.left;
+      let top = (typeof y === 'number') ? y + 6 : r.bottom + 4;
+      if (left + w > innerWidth - 8) left = innerWidth - w - 8;
+      if (top + h > innerHeight - 8) top = ((typeof y === 'number') ? y : r.top) - h - 6;
+      menu.style.left = Math.max(8, left) + 'px';
+      menu.style.top = Math.max(8, top) + 'px';
+      this._pageMenuDismiss = e => {
+        if (this._pageMenu && !this._pageMenu.contains(e.target)) this._closePageMenu();
+      };
+      setTimeout(() => document.addEventListener('pointerdown', this._pageMenuDismiss, true), 0);
+    }
+
+    _closePageMenu() {
+      if (this._pageMenu) { this._pageMenu.remove(); this._pageMenu = null; }
+      if (this._pageMenuDismiss) {
+        document.removeEventListener('pointerdown', this._pageMenuDismiss, true);
+        this._pageMenuDismiss = null;
+      }
     }
 
     /* ---------- 编辑器同步（行号 + 高亮） ---------- */
@@ -522,77 +813,138 @@
     }
 
     _errLine(e, code) {
+      /* 语法错误优先用源码定位：stack 里的 <anonymous>:N 可能是调用方，不是出错行 */
+      if (e instanceof SyntaxError) return NS.sandbox.findSyntaxLine(code) || 1;
       const s = String(e.stack || '');
       const m = s.match(/<anonymous>:(\d+):\d+/);
       if (m) {
-        /* compileApp 用 new Function('Component','h',...)：函数签名占 2 行，
-           stack 行号比编辑器行号多 2（V8 实测校准） */
+        /* compileApp 用 new Function('Component','h',...)：函数签名占 2 行 */
+        const total = String(code).split('\n').length;
         const ln = Number(m[1]) - 2;
-        return ln >= 1 ? ln : 1;
+        if (ln >= 1 && ln <= total) return ln;
+        return NS.sandbox.findSyntaxLine(code) || 1;
       }
-      if (e instanceof SyntaxError) return NS.sandbox.findSyntaxLine(code) || 1;
       return 0;
     }
 
-    /* ---------- 动作 ---------- */
-    run() {
-      const code = this._ta ? this._ta.value : TEMPLATE;
-      const pv = this._previewEl;
-      if (!pv) return;
-      this._killRun(); /* 先终止旧沙箱 */
-      const self = this;
-      const handle = NS.sandbox.mountApp(pv, code, {
-        log: (item) => self._pushLog(item.level, item.text),
-        error: (item) => {
-          self._pushLog('error', (item.line ? '第 ' + item.line + ' 行 · ' : '') + item.text);
-          self._showErr(item.line);
-        },
-        fatal: (item) => {
-          const d = document.createElement('div');
-          d.className = 'as-error';
-          d.textContent = (item.line ? '第 ' + item.line + ' 行 · ' : '') + (item.message || '运行失败');
-          pv.textContent = '';
-          pv.appendChild(d);
-          self.setStatus('as-err', '✕ 第 ' + item.line + ' 行 · ' + item.message);
+    /* ---------- 动作 · 运行（预览独立成窗口） ---------- */
+    _ensurePreviewApp() {
+      const id = 'appstudio-preview';
+      const APPS = NS.apps.APPS;
+      if (APPS[id]) return APPS[id];
+      const def = {
+        id: id, name: '预览', hidden: true, multi: true,
+        icon: NS.render.icons.APPS.appstudio || NS.render.icons.UI.window || null,
+        build: function (body, args) {
+          body.textContent = '';
+          const wrap = document.createElement('div');
+          wrap.className = 'as-pvw';
+          const frameBox = document.createElement('div');
+          frameBox.className = 'as-pvw-frame';
+          const log = document.createElement('div');
+          log.className = 'as-pvw-log';
+          wrap.appendChild(frameBox);
+          wrap.appendChild(log);
+          body.appendChild(wrap);
+          const push = function (lv, text) {
+            const row = document.createElement('div');
+            row.className = 'as-debug-item lv-' + (lv === 'error' ? 'error' : 'log');
+            row.textContent = (lv === 'error' ? '✕ ' : '· ') + String(text);
+            if (log.childNodes.length >= 200) log.removeChild(log.firstChild);
+            log.appendChild(row);
+            log.scrollTop = log.scrollHeight;
+          };
+          const pages = (args && args.pages) || [];
+          const startName = (args && args.startName) || (pages[0] && pages[0].name);
+          frameBox.__pvHandle = NS.sandbox.mountMultiApp(frameBox, pages, startName, {
+            log: function (i) { push('log', i.text); },
+            error: function (i) {
+              push('error', (i.page ? '[' + i.page + '] ' : '') + (i.line ? '第 ' + i.line + ' 行 · ' : '') + i.text);
+            },
+            fatal: function (i) {
+              push('error', (i.page ? '[' + i.page + '] ' : '') + (i.line ? '第 ' + i.line + ' 行 · ' : '') + (i.message || '运行失败'));
+            }
+          }, NS.sandbox.readTheme());
+          push('log', '沙箱已启动 · ' + pages.length + ' 个页面 · 隔离运行');
         }
-      }, NS.sandbox.readTheme());
-      if (!handle) return;
-      this._runHandle = handle;
+      };
+      APPS[id] = def;
+      return def;
+    }
+
+    run() {
+      if (!this._ta) return;
+      this._syncCurrentPage();
+      this._closePageMenu();
+      /* M6 · 可视化页先按当前 UI 树重算代码 */
+      this._pages.forEach(p => { if (p.mode === 'ui') p.code = NS.apps.appstudioUI.genCode(p); });
+      if (this._curPage.mode === 'ui' && this._ta) { this._ta.value = this._curPage.code; this._syncEditor(); }
+      /* 语法预检：错误直接标在编辑器行号上，不弹预览窗口 */
+      for (const p of this._pages) {
+        try { NS.apps.compileApp(p.code); }
+        catch (e) {
+          if (this._curPage.id !== p.id) this._switchPage(p.id);
+          const ln = this._errLine(e, p.code) || NS.sandbox.findSyntaxLine(p.code) || 1;
+          this._showErr(ln);
+          this.setStatus('as-err', '✕ 页面「' + p.name + '」· ' + e.message);
+          NS.render.toast('页面「' + p.name + '」语法错误');
+          return;
+        }
+      }
       this._clearErr();
-      this._pushLog('log', '已在沙箱中启动 · ' + (this._current || '应用') + ' · 隔离运行');
-      this.setStatus('as-ok', '✓ 沙箱运行中 · 预览已更新 · 日志见下方调试面板');
+      const pages = this._pages.map(p => ({ name: p.name, code: p.code }));
+      const startPage = this._pages.find(p => p.id === this._startPageId) || this._pages[0];
+      this._openPreview(pages, startPage.name);
+      this.setStatus('as-ok', '✓ 预览窗口已打开 · ' + this._pages.length + ' 页面');
+    }
+
+    _openPreview(pages, startName) {
+      const def = this._ensurePreviewApp();
+      const appName = (this._nameInput && this._nameInput.value.trim()) || this._current || '应用';
+      def.name = '预览 · ' + appName;
+      this._killRun();
+      NS.system.winman.openApp('appstudio-preview', { pages: pages, startName: startName });
     }
 
     _killRun() {
-      if (this._runHandle) {
-        this._runHandle.kill();
-        this._runHandle = null;
-      }
-    }
-
-    _pushLog(level, text) {
-      if (!this._debugList) return;
-      if (this._debugList.childNodes.length >= 200) this._debugList.removeChild(this._debugList.firstChild);
-      const row = document.createElement('div');
-      row.className = 'as-debug-item lv-' + (level === 'error' || level === 'warn' ? level : 'log');
-      const tag = document.createElement('span');
-      tag.className = 'as-debug-lvl';
-      tag.textContent = level === 'error' ? '✕' : level === 'warn' ? '!' : '·';
-      row.appendChild(tag);
-      row.appendChild(document.createTextNode(' ' + String(text)));
-      this._debugList.appendChild(row);
-      this._debugList.scrollTop = this._debugList.scrollHeight;
+      const list = NS.system.winman.wins.filter(w => w.appId === 'appstudio-preview');
+      list.forEach(w => {
+        const f = w.el.querySelector('.as-pvw-frame');
+        if (f && f.__pvHandle) { try { f.__pvHandle.kill(); } catch (e) {} f.__pvHandle = null; }
+        NS.system.winman.closeWin(w);
+      });
     }
 
     async save() {
       const name = (this._nameInput ? this._nameInput.value.trim() : '') || '我的应用';
-      const code = this._ta ? this._ta.value : TEMPLATE;
-      if (!code.trim()) { NS.render.toast('代码为空，先写点东西再保存'); return; }
-      try { NS.apps.compileApp(code); }
-      catch (e) { NS.render.toast('语法错误，无法保存：' + e.message); this.setStatus('as-err', '✕ 第 ' + this._errLine(e, code) + ' 行 · ' + e.message); return; }
+      this._syncCurrentPage();
+      this._pages.forEach(p => { if (p.mode === 'ui') p.code = NS.apps.appstudioUI.genCode(p); });
+      if (this._pages.some(p => !p.code.trim())) { NS.render.toast('有页面代码为空，先写点东西再保存'); return; }
+      let bad = null;
+      for (const p of this._pages) {
+        try { NS.apps.compileApp(p.code); }
+        catch (e) { bad = { p: p, e: e }; break; }
+      }
+      if (bad) {
+        NS.render.toast('页面「' + bad.p.name + '」语法错误，无法保存：' + bad.e.message);
+        this.setStatus('as-err', '✕ 页面「' + bad.p.name + '」· ' + bad.e.message);
+        if (this._curPage.id !== bad.p.id) this._switchPage(bad.p.id);
+        this._showErr(this._errLine(bad.e, bad.p.code) || NS.sandbox.findSyntaxLine(bad.p.code) || 1);
+        return;
+      }
       const oldId = this._currentId;
       const id = 'userapp-' + name;
-      const def = { id, name, code, updatedAt: Date.now() };
+      const startPage = this._pages.find(p => p.id === this._startPageId) || this._pages[0];
+      const def = {
+        id, name, v: 2,
+        pages: this._pages.map(p => ({
+          id: p.id, name: p.name, code: p.code,
+          mode: p.mode === 'ui' ? 'ui' : 'code',
+          ui: Array.isArray(p.ui) ? p.ui : []
+        })),
+        startPageId: startPage.id, startPageName: startPage.name,
+        updatedAt: Date.now()
+      };
       try {
         /* 改名时清理旧注册与旧文件 */
         if (oldId && oldId !== id) {
@@ -611,18 +963,9 @@
       }
     }
 
-    reset() {
-      this._killRun();
-      if (this._debugList) this._debugList.innerHTML = '';
-      if (this._ta) { this._ta.value = TEMPLATE; this._syncEditor(); }
-      if (this._previewEl) this._previewEl.innerHTML = '<div class="as-empty">点击「运行」生成预览</div>';
-      this._clearErr();
-      this.setStatus('as-ok', '✓ 就绪 · 点击「运行」生成预览');
-    }
-
     componentWillUnmount() {
       this._killRun();
-      this._ta = this._nameInput = this._previewEl = this._statusText = this._gutter = this._hl = this._debugList = this._debugBox = null;
+      this._ta = this._nameInput = this._statusText = this._gutter = this._hl = null;
     }
   }
 

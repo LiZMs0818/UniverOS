@@ -61,8 +61,10 @@
     return 0;
   }
 
-  /* ---------- iframe 内迷你运行时（独立作用域，零父系统引用） ---------- */
-  const RUNTIME = `
+  /* ---------- iframe 内迷你运行时（独立作用域，零父系统引用） ----------
+     RUNTIME_BASE：h/Component/bridge/console/error 公共部分
+     RUNTIME_SINGLE：单页（M1-M4 旧格式） RUNTIME_MULTI：多页面路由（M5） */
+  const RUNTIME_BASE = `
 'use strict';
 function h(tag, attrs, children) {
   var el = document.createElement(tag);
@@ -122,6 +124,8 @@ function logLine(e) {
 window.addEventListener('error', function (ev) {
   bridge('error', { level: 'error', text: String(ev && ev.message || 'runtime error'), line: (ev && ev.lineno) || 0 });
 });
+`;
+  const RUNTIME_SINGLE = `
 var AppCls;
 try {
   AppCls = new Function('Component', 'h', '"use strict"; return (' + __UV_CODE__ + '\\n);')(Component, h);
@@ -138,6 +142,106 @@ if (AppCls) {
   } catch (e2) {
     bridge('error', { level: 'error', text: String(e2 && e2.message || e2), line: logLine(e2) });
     bridge('fatal', { message: String(e2 && e2.message || e2), line: logLine(e2) });
+  }
+}
+`;
+  const RUNTIME = RUNTIME_BASE + RUNTIME_SINGLE;
+
+  /* M5 · 多页面：全局 navigate + Router 根组件 + 逐页编译 */
+  const RUNTIME_MULTI = `
+var __nav = null;
+function navigate(name, params) { if (__nav) return __nav(name, params); }
+/* 多页运行时增强 h：支持组件类（迷你 h 原本只认字符串标签） */
+var __hBase = h;
+h = function (tag, attrs, kids) {
+  if (typeof tag === 'function') {
+    var box = document.createElement('div');
+    var comp = new tag(attrs || {});
+    comp.mount(box);
+    return box;
+  }
+  return __hBase(tag, attrs, kids);
+};
+function Router(PAGES, startName) {
+  Component.call(this);
+  this._pages = PAGES;
+  this._name = startName;
+  this._params = null;
+  this._wrap = null;
+  this._boxes = {};
+  this._inst = {};
+}
+Router.prototype = Object.create(Component.prototype);
+Router.prototype.constructor = Router;
+/* 页面实例常驻：切换只改显隐，返回时状态与 DOM 都还在 */
+Router.prototype.mount = function (container) {
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'height:100%;';
+  container.textContent = '';
+  container.appendChild(wrap);
+  this._container = container;
+  this._wrap = wrap;
+  this._mounted = true;
+  this._show(this._name);
+  if (this.componentDidMount) this.componentDidMount();
+  return wrap;
+};
+Router.prototype._show = function (name) {
+  var self = this;
+  var box = this._boxes[name];
+  if (!box) {
+    box = document.createElement('div');
+    box.style.cssText = 'box-sizing:border-box;height:100%;overflow:auto;';
+    this._wrap.appendChild(box);
+    var Cls = this._pages[name];
+    var inst = new Cls({
+      navigate: function (n, p) { return self.navigate(n, p); },
+      page: name,
+      params: this._params
+    });
+    this._inst[name] = inst;
+    inst.mount(box);
+    this._boxes[name] = box;
+  }
+  for (var k in this._boxes) {
+    if (!Object.prototype.hasOwnProperty.call(this._boxes, k)) continue;
+    this._boxes[k].style.display = (k === name) ? '' : 'none';
+  }
+};
+Router.prototype.navigate = function (name, params) {
+  if (!this._pages[name]) { console.error('页面不存在：' + name); return; }
+  this._name = name;
+  this._params = params === undefined ? null : params;
+  if (!this._mounted) return;
+  var inst = this._inst[name];
+  if (inst) inst.props = { navigate: this.navigate.bind(this), page: name, params: this._params };
+  this._show(name);
+};
+Router.prototype.render = function () { return h('div'); };
+var PAGES = {};
+var pageDefs = __UV_PAGES__;
+var pageFail = null;
+for (var pi = 0; pi < pageDefs.length; pi++) {
+  try {
+    var PageCls = new Function('Component', 'h', 'navigate', '"use strict"; return (' + pageDefs[pi].code + '\\n);')(Component, h, navigate);
+    if (typeof PageCls !== 'function') throw new Error('页面「' + pageDefs[pi].name + '」需定义一个组件类');
+    PAGES[pageDefs[pi].name] = PageCls;
+  } catch (pe) { pageFail = { name: pageDefs[pi].name, e: pe }; break; }
+}
+if (pageFail) {
+  bridge('error', { level: 'error', page: pageFail.name, text: String(pageFail.e && pageFail.e.message || pageFail.e), line: logLine(pageFail.e) });
+  bridge('fatal', { page: pageFail.name, message: String(pageFail.e && pageFail.e.message || pageFail.e), line: logLine(pageFail.e) });
+} else {
+  try {
+    var startName = __UV_START__;
+    if (!PAGES[startName]) startName = pageDefs[0].name;
+    var router = new Router(PAGES, startName);
+    window.__uvRouter = router;
+    __nav = function (n, p) { return router.navigate(n, p); };
+    router.mount(document.getElementById('root'));
+  } catch (re2) {
+    bridge('error', { level: 'error', text: String(re2 && re2.message || re2), line: logLine(re2) });
+    bridge('fatal', { message: String(re2 && re2.message || re2), line: logLine(re2) });
   }
 }
 `;
@@ -159,6 +263,28 @@ if (AppCls) {
       + '.as-btn:hover{background:rgba(77,163,255,.14);}'
       + '</style></head><body><div id="root"></div>'
       + '<script>var __UV_CODE__ = ' + JSON.stringify(code) + ';\n' + RUNTIME + '</script>'
+      + '</body></html>';
+  }
+
+  function srcdocMultiFor(pages, startName, theme) {
+    const t = theme || {};
+    const text = t.text || '#ffffff';
+    const dim = t.dim || 'rgba(255,255,255,.55)';
+    const accent = t.accent || '#4da3ff';
+    const payload = JSON.stringify(pages.map(p => ({ name: p.name, code: p.code })));
+    return ''
+      + '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+      + ':root{--text:' + text + ';--text-dim:' + dim + ';--accent:' + accent + ';}'
+      + 'html,body{margin:0;height:100%;overflow:auto;background:transparent;color:var(--text);font:13px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;}'
+      + '#root{min-height:100%;box-sizing:border-box;}'
+      + 'button{font:inherit;border:1px solid var(--text-dim);border-radius:8px;background:none;color:var(--text);padding:6px 16px;cursor:pointer;transition:background .12s;}'
+      + 'button:hover{border-color:var(--accent);color:var(--accent);}'
+      + 'input,textarea,select{font:inherit;background:none;border:1px solid var(--text-dim);border-radius:6px;color:var(--text);padding:4px 8px;}'
+      + '.as-btn{border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);padding:6px 16px;cursor:pointer;}'
+      + '.as-btn:hover{background:rgba(77,163,255,.14);}'
+      + '</style></head><body><div id="root"></div>'
+      + '<script>var __UV_PAGES__ = ' + payload + ';var __UV_START__ = ' + JSON.stringify(startName) + ';\n'
+      + RUNTIME_BASE + RUNTIME_MULTI + '</script>'
       + '</body></html>';
   }
 
@@ -217,9 +343,59 @@ if (AppCls) {
     };
   }
 
+  /* ---------- M5 · 挂载多页面沙箱 ---------- */
+  function mountMultiApp(el, pages, startName, handlers, theme) {
+    if (!el || !Array.isArray(pages) || pages.length === 0) return null;
+    let msg = null, line = 0, pageName = '';
+    for (const p of pages) {
+      try {
+        new Function('Component', 'h', 'navigate', '"use strict"; return (' + p.code + '\n);');
+      } catch (e) {
+        msg = String(e && e.message || e);
+        line = findSyntaxLine(p.code) || 1;
+        pageName = p.name;
+        break;
+      }
+    }
+    if (msg) {
+      const item = { level: 'error', text: msg, line: line, page: pageName };
+      if (handlers && handlers.error) handlers.error(item);
+      if (handlers && handlers.fatal) handlers.fatal(item);
+      return null;
+    }
+
+    const ifr = document.createElement('iframe');
+    ifr.setAttribute('sandbox', 'allow-scripts');
+    ifr.setAttribute('scrolling', 'yes');
+    ifr.style.cssText = 'border:0;width:100%;height:100%;display:block;background:transparent;';
+    ifr.srcdoc = srcdocMultiFor(pages, startName, theme || readTheme());
+    el.textContent = '';
+    el.appendChild(ifr);
+
+    const onMsg = function (e) {
+      if (e.source !== ifr.contentWindow) return;
+      const d = e.data;
+      if (!d || d.uv !== true) return;
+      if (d.type !== 'log' && d.type !== 'error' && d.type !== 'fatal') return;
+      const data = d.data || {};
+      if (data.text !== undefined && typeof data.text !== 'string') return;
+      if (handlers && handlers[d.type]) handlers[d.type](data);
+    };
+    window.addEventListener('message', onMsg);
+
+    return {
+      kill: function () {
+        window.removeEventListener('message', onMsg);
+        try { ifr.remove(); } catch (e2) {}
+        if (el) el.textContent = '';
+      }
+    };
+  }
+
   NS.sandbox = {
     findSyntaxLine: findSyntaxLine,
     readTheme: readTheme,
-    mountApp: mountApp
+    mountApp: mountApp,
+    mountMultiApp: mountMultiApp
   };
 })(window);

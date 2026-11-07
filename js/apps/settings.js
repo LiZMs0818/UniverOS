@@ -9,7 +9,7 @@
   const h = NS.render.h;
   const Component = NS.render.Component;
   const C = NS.render.controls;
-  const { Switch, Slider, Seg, MiniButton, KVRow, SectionTitle } = C;
+  const { Switch, Slider, Seg, Select, MiniButton, KVRow, SectionTitle } = C;
   const { store, config, theme, fs, quota } = NS.core;
   const { formatSize } = NS.core.utils;
   const { toast, confirmDialog } = NS.render;
@@ -302,8 +302,8 @@
       return [
         h('h2', null, '默认应用'),
         SectionTitle('文件打开方式'),
-        KVRow('文本文件', null, h('select', { className: 'st-select' }, h('option', null, '文本编辑'))),
-        KVRow('图片', null, h('select', { className: 'st-select' }, h('option', null, '图片查看器')))
+        KVRow('文本文件', null, Select([['text', '文本编辑']], 'text', () => {}, { className: 'st-select' })),
+        KVRow('图片', null, Select([['image', '图片查看器']], 'image', () => {}, { className: 'st-select' }))
       ];
     }
 
