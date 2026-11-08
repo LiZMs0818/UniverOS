@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Universe OS · 软件层 · browser.js
    浏览器（声明式 Component）：书签、URL 规范化、iframe 嵌入、侧栏书签
    ============================================================ */
@@ -71,7 +71,7 @@
         h('div', { className: 'br-view' }, [
           this.state.showHome
             ? h('div', { className: 'br-home' }, [
-                h('div', { className: 'br-tip' }, '部分网站禁止被嵌入（X-Frame-Options / CSP），可能显示空白。'),
+                h('div', { className: 'br-tip' }, '部分页面不允许嵌入'),
                 h('div', { className: 'br-grid' }, BOOKMARKS.map(b =>
                   h('button', { className: 'br-card', dataset: { url: b.url }, onclick: () => this.load(b.url) }, [
                     h('span', { className: 'br-card-ic', html: I.globe }),

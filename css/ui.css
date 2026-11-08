@@ -45,9 +45,9 @@ html[data-mode="light"] .window.dialog{background:rgba(250,250,253,.96)}
   color:var(--text);font-size:13px;padding:0 10px;outline:none;box-sizing:border-box}
 .dlg-input:focus{border-color:var(--accent)}
 .dlg-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:auto}
-.mini-btn.danger{color:var(--danger);border-color:rgba(255,69,58,.5)}
-.mini-btn.danger:hover{background:rgba(255,69,58,.14)}
-.mini-btn.danger.primary{background:var(--danger);border-color:var(--danger);color:#fff}
+.mini-btn.danger{color:var(--danger);background:rgba(255,69,58,.14)}
+.mini-btn.danger:hover{background:rgba(255,69,58,.22)}
+.mini-btn.danger.primary{background:var(--danger);color:#fff}
 .mini-btn.danger.primary:hover{background:#e0362b}
 
 /* ---------- 模态弹窗 ---------- */
@@ -71,13 +71,49 @@ html[data-mode="light"] .window.dialog{background:rgba(250,250,253,.96)}
   opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;z-index:26000;max-width:80vw;text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* ---------- 系统按钮（胶囊形，统一 API：NS.render.controls.Button） ---------- */
+.ui-btn,.mini-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;
+  height:30px;padding:0 14px;border:none;border-radius:999px;background:var(--bg-input);color:var(--text);
+  font-size:12.5px;line-height:1;cursor:pointer;white-space:nowrap;
+  transition:background .16s,transform .16s cubic-bezier(.3,.7,.4,1.3),opacity .16s}
+.ui-btn:hover,.mini-btn:hover{background:var(--bg-hover)}
+.ui-btn:active,.mini-btn:active{transform:scale(.97)}
+.ui-btn.primary,.mini-btn.primary{background:var(--accent);color:#fff}
+.ui-btn.primary:hover,.mini-btn.primary:hover{background:var(--accent-hover)}
+.ui-btn.danger,.mini-btn.danger{color:var(--danger);background:rgba(255,69,58,.14)}
+.ui-btn.danger:hover,.mini-btn.danger:hover{background:rgba(255,69,58,.22)}
+.ui-btn.danger.primary,.mini-btn.danger.primary{background:var(--danger);color:#fff}
+.ui-btn.danger.primary:hover,.mini-btn.danger.primary:hover{background:#e0362b}
+.ui-btn.quiet,.mini-btn.quiet{background:transparent;color:var(--text-dim)}
+.ui-btn.quiet:hover,.mini-btn.quiet:hover{background:var(--bg-hover);color:var(--text)}
+.ui-btn.icon{width:30px;padding:0}
+.ui-btn.icon svg,.mini-btn.icon svg{width:14px;height:14px}
+.ui-btn:disabled,.mini-btn:disabled{opacity:.4;pointer-events:none}
+
+/* ---------- 开关（胶囊 44×26，统一 API：NS.render.controls.Switch） ---------- */
+.ui-sw{position:relative;width:44px;height:26px;flex:none;display:inline-block}
+.ui-sw input{opacity:0;width:0;height:0;position:absolute}
+.ui-sw .track{position:absolute;inset:0;background:rgba(255,255,255,.18);border-radius:999px;
+  transition:background .16s,transform .16s cubic-bezier(.3,.7,.4,1.3);cursor:pointer}
+.ui-sw .track::before{content:'';position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;
+  background:#fff;transition:transform .16s cubic-bezier(.3,.7,.4,1.3);box-shadow:0 1px 2px rgba(0,0,0,.3);pointer-events:none}
+.ui-sw input:checked + .track{background:var(--accent)}
+.ui-sw input:checked + .track::before{transform:translateX(18px)}
+.ui-sw:active .track{transform:scale(1.08)}
+html[data-mode="light"] .ui-sw .track{background:rgba(0,0,0,.16)}
+
+/* ---------- 滑块（4px 轨道 + 14px 白色圆头，统一 API：NS.render.controls.Slider） ---------- */
+.ui-range{flex:none;width:130px;height:4px;border-radius:2px;outline:none;cursor:pointer;
+  -webkit-appearance:none;appearance:none;
+  background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--pct,50%),var(--bg-input) var(--pct,50%),var(--bg-input) 100%)}
+.ui-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;
+  background:#fff;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .14s cubic-bezier(.3,.7,.4,1.3)}
+.ui-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;cursor:pointer;border:none;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.ui-range:active::-webkit-slider-thumb{transform:scale(1.12)}
+.ui-range-val{font-variant-numeric:tabular-nums;color:var(--accent);font-weight:600;font-size:12px;min-width:46px;text-align:right}
+.ui-range-wrap{display:flex;align-items:center;gap:8px}
+
 /* ---------- 通用按钮 / 应用布局 ---------- */
-.mini-btn{padding:6px 14px;border-radius:7px;font-size:12px;cursor:pointer;color:var(--text);
-  border:1px solid var(--border-strong);background:var(--bg-input);transition:background .15s}
-.mini-btn:hover{background:var(--bg-hover)}
-.mini-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.mini-btn.primary:hover{background:var(--accent-hover)}
-.mini-btn:disabled{opacity:.4;pointer-events:none}
 .app-pad{padding:16px 18px 24px}
 .app-h{margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}
 .app-h:not(:first-child){margin-top:22px}
@@ -95,8 +131,10 @@ html[data-mode="light"] .window.dialog{background:rgba(250,250,253,.96)}
 .sidebar-list-item .sli-icon{width:16px;height:16px;flex:0 0 auto;display:grid;place-items:center;opacity:.7}
 .sidebar-list-item .sli-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-section-title{padding:8px 10px 4px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-mute)}
-.sidebar-action-btn{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;margin-bottom:4px;
-  border:none;background:var(--accent);color:#fff;font-size:12.5px;border-radius:7px;cursor:pointer;text-align:left;justify-content:center}
+.sidebar-action-btn{display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 12px;margin-bottom:6px;
+  border:none;background:var(--accent);color:#fff;font-size:12.5px;border-radius:999px;cursor:pointer;text-align:center;justify-content:center;
+  transition:background .16s,transform .16s cubic-bezier(.3,.7,.4,1.3)}
+.sidebar-action-btn:active{transform:scale(.97)}
 .sidebar-action-btn:hover{background:var(--accent-hover)}
 
 /* ===== 全局搜索（Spotlight）===== */

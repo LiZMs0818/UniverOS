@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Universe OS · 软件层 · files.js
    文件管理（声明式 Component）：
    导航/面包屑/搜索/排序/视图切换/多选/剪贴板/导入导出/
@@ -147,7 +147,7 @@
         return h('div', { className: 'fm-empty' }, '读取失败：' + escapeHtml(s.error));
       }
       if (!s.entries.length) {
-        return h('div', { className: 'fm-empty' }, s.query ? '没有匹配的文件' : '此文件夹为空<br>双击空白处可新建，或点 ＋ 导入文件');
+        return h('div', { className: 'fm-empty' }, s.query ? '没有匹配的文件' : '空文件夹');
       }
       this._entryMap = new Map();
       return s.entries.map(e => {

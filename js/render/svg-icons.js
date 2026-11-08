@@ -22,7 +22,8 @@
       imageviewer: wrap('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-5 4 4 3-3 4 4"/>'),
       taskmanager: wrap('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 13.5 2.5-3 2.5 2.5 3.5-5 2.5 3.5"/><path d="M7 17.5h10"/>'),
       terminal: wrap('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 9 2.5 2-2.5 2"/><path d="M12.5 13h4.5"/>'),
-      appstudio: wrap('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m8.5 10.5 2.5-2-2.5-2"/><path d="M12.5 12.5h3.5"/><path d="M8.5 16h7"/>')
+      appstudio: wrap('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m8.5 10.5 2.5-2-2.5-2"/><path d="M12.5 12.5h3.5"/><path d="M8.5 16h7"/>'),
+      vault: wrap('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M12 8.1l1.2 2.5 2.5 1.2-2.5 1.2L12 15.5l-1.2-2.5L8.3 11.8l2.5-1.2z"/>')
     },
 
     /* 设置侧栏导航图标 */
@@ -58,7 +59,11 @@
       left: wrap('<path d="M15 5l-7 7 7 7"/>'),
       right: wrap('<path d="m9 5 7 7-7 7"/>'),
       refresh: wrap('<path d="M20.5 12a8.5 8.5 0 1 1-2.4-5.9"/><path d="M20.5 3.5V8H16"/>'),
-      search: wrap('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/>')
+      search: wrap('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/>'),
+      copy: wrap('<rect x="8" y="8" width="11" height="12" rx="2"/><path d="M15.5 5.5A1.5 1.5 0 0 0 14 4H6a2 2 0 0 0-2 2v9"/>'),
+      up: wrap('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>'),
+      stop: wrap('<rect x="7" y="7" width="10" height="10" rx="2"/>'),
+      spark: wrap('<path d="M12 4.5l1.7 4.3 4.3 1.7-4.3 1.7L12 15.8l-1.7-4.3L6 10l4.3-1.7z"/>')
     }
   };
 })(window);

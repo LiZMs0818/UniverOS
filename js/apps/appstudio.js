@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Universe OS · 软件层 · appstudio.js
    Universe Studio：Swift Playgrounds 式原生应用开发工具
    M1 · 持久化 + 启动台注册：保存为 /apps/<名>.uapp → 动态注册 → 开机扫描加载
@@ -101,7 +101,7 @@
         '/* 信息卡片 */',
         "h('div', { style: 'border:1px solid var(--border-strong);border-radius:10px;padding:14px;' }, [",
         "  h('div', { style: 'font-weight:600;margin-bottom:6px;' }, '卡片标题'),",
-        "  h('div', { style: 'color:var(--text-dim);font-size:12px;line-height:1.6;' }, '卡片描述：放一句说明文字。')",
+        "  h('div', { style: 'color:var(--text-dim);font-size:12px;line-height:1.6;' }, '这里是一段说明文字。')",
         ']),'
       ].join('\n')
     },
@@ -234,7 +234,7 @@
       bar.innerHTML = '<span style="flex:1"></span>';
       main.innerHTML = ''
         + '<div class="as-home">'
-        +   '<div class="as-hero"><div class="as-hero-sub">在 UniverOS 里制作你自己的原生应用 · 保存后即注册进启动台</div></div>'
+        +   '<div class="as-hero"><div class="as-hero-sub">原生应用 · 保存后进入启动台</div></div>'
         +   '<div class="as-section">'
         +     '<div class="as-sec-title">我的应用</div>'
         +     '<div class="as-apps"></div>'
@@ -243,12 +243,12 @@
         + '</div>';
       root.querySelector('.as-new').addEventListener('click', () => this._newApp());
       this._renderCards(main.querySelector('.as-apps'));
-      this.setStatus('as-ok', '✓ 就绪 · ' + (this._apps.length > 0 ? this._apps.length + ' 个应用 · ' : '') + '新建或打开一个应用开始开发');
+      this.setStatus('as-ok', '✓ 就绪 · ' + (this._apps.length > 0 ? this._apps.length + ' 个应用 · ' : '') + '选择或新建应用');
     }
 
     _renderCards(container) {
       if (this._apps.length === 0) {
-        container.innerHTML = '<div class="as-apps-empty">还没有应用 · 点击「新建应用」开始第一个</div>';
+        container.innerHTML = '<div class="as-apps-empty">还没有应用</div>';
         return;
       }
       container.innerHTML = this._apps.map((a, i) =>
@@ -558,7 +558,7 @@
       this._curPage = page;
       this._applyMode();
       this._renderPageTabs();
-      this.setStatus('as-ok', '已新建页面「' + name + '」' + (mode === 'ui' ? ' · 空画布，从左侧加组件' : ' · 点「运行」可测试页面跳转'));
+      this.setStatus('as-ok', '已新建页面「' + name + '」' + (mode === 'ui' ? ' 空画布 · 从左侧添加组件' : ' 点「运行」可测试'));
     }
 
     async _renamePage(pid) {
@@ -769,7 +769,7 @@
       const a = Math.min(this._selStart, this._selEnd, cur.length);
       const b = Math.min(Math.max(this._selStart, this._selEnd), cur.length);
       const code = cur.slice(a, b);
-      if (!code.trim()) { NS.render.toast('请先在编辑器里选中一段代码'); return; }
+      if (!code.trim()) { NS.render.toast('先在编辑器里选中代码'); return; }
       const name = await NS.render.promptDialog('代码块名称', '我的代码块 ' + (this._customSnippets().length + 1));
       if (!name) return;
       const list = this._customSnippets();

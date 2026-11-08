@@ -69,6 +69,11 @@
       id: 'appstudio', name: 'Universe Studio', icon: I.appstudio,
       bg: 'linear-gradient(150deg,#8a8a96,#26262e)', fg: '#fff',
       build: (body) => new NS.apps.AppStudioApp().mount(body)
+    },
+    vault: {
+      id: 'vault', name: 'Universe Vault', withSidebar: true, icon: I.vault,
+      bg: 'linear-gradient(150deg,#586075,#181b22)', fg: '#fff',
+      build: (body, sidebar) => new NS.apps.VaultApp().mount(body, sidebar)
     }
   };
 

@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Universe OS · 软件层 · notes.js
    备忘录（声明式 Component）：笔记列表/搜索/新建/删除/导出、
    Markdown 标题、绘画模式（canvas 画/橡皮/调色/撤销/保存）、
@@ -128,7 +128,7 @@
             h('div', { className: 'draw-canvas-wrap', ref: el => (this._canvasWrap = el) }, [
               h('canvas', { className: 'draw-canvas', ref: el => (this._canvasEl = el) })
             ]),
-            h('div', { className: 'draw-status' }, '拖动绘制 · 保存后可在文件应用查看')
+            h('div', { className: 'draw-status' }, '拖动绘制 · 保存到文件')
           ])
         ])
       ]);
@@ -155,11 +155,10 @@
         })),
         h('div', { className: 'draw-size' }, [
           h('span', null, '粗细'),
-          h('input', {
-            type: 'range', min: '1', max: '20', step: '1', value: String(size),
-            oninput: e => this.setSize(+e.target.value)
-          }),
-          h('span', null, String(size))
+          NS.render.controls.Slider({
+            min: 1, max: 20, step: 1, value: size, showVal: true, width: '96px',
+            onInput: v => this.setSize(v)
+          })
         ]),
         h('button', { className: 'mini-btn', onclick: () => this.undoDraw() },
           [h('span', { className: 'tb-ic', html: I.undo }), ' 撤销']),

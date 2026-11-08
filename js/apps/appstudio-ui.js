@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Universe OS · 软件层 · appstudio-ui.js
    M6 · 可视化 UI 构建器
    - 组件库 / 画布 / 属性面板 / 拖拽排序
@@ -512,7 +512,7 @@
       if (!page.ui.length) {
         const e = document.createElement('div');
         e.className = 'ub-empty';
-        e.textContent = '从左边的组件里点一个加进来';
+        e.textContent = '从左侧添加组件';
         canvas.appendChild(e);
         return;
       }
@@ -643,7 +643,7 @@
       if (!selNode) {
         const t = document.createElement('div');
         t.className = 'ub-empty2';
-        t.textContent = '选中画布里的组件后，在这里改文字、样式和点击逻辑';
+        t.textContent = '选中组件后可改属性';
         insp.appendChild(t);
         return;
       }

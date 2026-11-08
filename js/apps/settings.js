@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Universe OS · 软件层 · settings.js
    设置应用（声明式 Component）：8 个面板 + 侧栏导航
    ============================================================ */
@@ -48,7 +48,7 @@
         stBarPct: 0, stBarWarn: false, stBarDanger: false,
         blur: store.get('blur', true)
       };
-      this.sliderLabels = {};
+      this.sliderLabels = null;
     }
 
     renderSidebar() {
@@ -124,33 +124,25 @@
 
     renderScaleSlider() {
       const uiScale = store.get('uiScale', 1);
-      return h('div', { className: 'st-row-ctrl' }, [
-        h('input', {
-          type: 'range', className: 'st-slider', min: '0.85', max: '1.15', step: '0.05', value: uiScale,
-          oninput: e => {
-            const v = parseFloat(e.target.value);
-            store.set('uiScale', v);
-            document.documentElement.style.fontSize = (16 * v) + 'px';
-            this.sliderLabels.scale.textContent = Math.round(v * 100) + '%';
-          }
-        }),
-        h('span', { className: 'st-slider-val', ref: el => (this.sliderLabels.scale = el) }, Math.round(uiScale * 100) + '%')
-      ]);
+      return Slider({
+        min: 0.85, max: 1.15, step: 0.05, value: uiScale, showVal: true,
+        format: v => Math.round(v * 100) + '%',
+        onInput: v => {
+          store.set('uiScale', v);
+          document.documentElement.style.fontSize = (16 * v) + 'px';
+        }
+      });
     }
 
     renderDockSlider() {
       const dockSize = store.get('dockSize', 52);
-      return h('div', { className: 'st-row-ctrl' }, [
-        h('input', {
-          type: 'range', className: 'st-slider', min: '40', max: '60', step: '2', value: dockSize,
-          oninput: e => {
-            store.set('dockSize', +e.target.value);
-            this.sliderLabels.dock.textContent = e.target.value;
-            NS.system.dock.renderDock();
-          }
-        }),
-        h('span', { className: 'st-slider-val', ref: el => (this.sliderLabels.dock = el) }, String(dockSize))
-      ]);
+      return Slider({
+        min: 40, max: 60, step: 2, value: dockSize, showVal: true,
+        onInput: v => {
+          store.set('dockSize', v);
+          NS.system.dock.renderDock();
+        }
+      });
     }
 
     /* ---------- 存储 ---------- */
@@ -187,7 +179,7 @@
           h('div', { className: 'storage-hint' + (this.state.backend && this.state.backend !== 'OPFS（持久化）' ? ' warn' : ''), ref: el => (this._stBackend = el) }, '存储后端：' + s.backend)
         ]),
         h('div', { className: 'storage-options' }, opts),
-        h('div', { className: 'storage-hint' }, '软配额，达到后 Universe 内写入会被拒绝。'),
+        h('div', { className: 'storage-hint' }, '达到上限后无法写入'),
         h('div', { style: { marginTop: '16px' } }, [
           KVRow('清理会话数据', '重置桌面布局和 Dock 配置',
             MiniButton({ label: '清理', onClick: () => this.clearLayout() })),
@@ -209,7 +201,7 @@
 
     refreshStorage() {
       fs.backend().then(be => {
-        const backendText = be === 'opfs' ? 'OPFS（持久化）' : '内存（沙箱环境，刷新后丢失）';
+        const backendText = be === 'opfs' ? 'OPFS' : '内存 · 刷新后丢失';
         this.setState({ backend: backendText });
         return quota.getUsage().then(used => {
           const limit = quota.getLimit();
@@ -284,16 +276,13 @@
             onchange: (e, input) => { store.set('draw.color', input.value); this.setState({ drawColor: input.value }); }
           })),
         KVRow('默认画笔粗细', null,
-          h('div', { className: 'st-row-ctrl' }, [
-            h('input', {
-              type: 'range', className: 'st-slider', min: '1', max: '20', step: '1', value: this.state.drawSize,
-              oninput: e => {
-                store.set('draw.size', +e.target.value);
-                this.setState({ drawSize: +e.target.value });
-              }
-            }),
-            h('span', { className: 'st-slider-val' }, String(this.state.drawSize))
-          ]))
+          Slider({
+            min: 1, max: 20, step: 1, value: this.state.drawSize, showVal: true,
+            onInput: v => {
+              store.set('draw.size', v);
+              this.setState({ drawSize: v });
+            }
+          }))
       ];
     }
 
@@ -332,8 +321,8 @@
       return [
         h('h2', null, '关于'),
         h('div', { className: 'st-about' }, [
-          h('p', null, [h('b', null, 'Universe'), ' 是一个浏览器端的桌面式操作系统模拟。']),
-          h('p', { style: { marginTop: '12px', color: 'var(--text-dim)', fontSize: '12px' } }, '版本 2.2.0 · 多文件 · 纯原生 · 零依赖')
+          h('p', null, [h('b', null, 'Universe'), ' · 浏览器里的桌面系统']),
+          h('p', { style: { marginTop: '12px', color: 'var(--text-dim)', fontSize: '12px' } }, '版本 2.2.0')
         ]),
         SectionTitle('系统信息'),
         KVRow('分辨率', null, h('span', { style: { color: 'var(--text-dim)' } }, this.state.res)),
