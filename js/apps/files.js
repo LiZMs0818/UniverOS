@@ -83,26 +83,14 @@
     render() {
       const s = this.state;
       const selCount = s.selection.length;
-      const I = NS.render.icons.UI;
       return h('div', { className: 'fm' }, [
         h('div', { className: 'fm-toolbar' }, [
-          h('button', { className: 'fm-btn', dataset: { act: 'back' }, disabled: this._historyIdx <= 0, onclick: () => this.back(), html: I.left }),
-          h('button', { className: 'fm-btn', dataset: { act: 'forward' }, disabled: this._historyIdx >= this._history.length - 1, onclick: () => this.forward(), html: I.right }),
-          h('button', { className: 'fm-btn', dataset: { act: 'home' }, onclick: () => this.navigateTo(''), html: I.home }),
           this.renderPath(),
           h('input', {
             className: 'fm-search', placeholder: '搜索', dataset: { search: '' },
             value: s.query,
             oninput: e => { this.setState({ query: e.target.value }); this.refresh(); }
-          }),
-          h('button', {
-            className: 'fm-btn', dataset: { act: 'view' },
-            title: '视图：' + (s.view === 'grid' ? '网格' : '列表'),
-            onclick: () => this.setView(s.view === 'grid' ? 'list' : 'grid'),
-            html: s.view === 'grid' ? I.list : I.grid
-          }),
-          h('button', { className: 'fm-btn', title: '导入', dataset: { act: 'import' }, onclick: () => this.fileInputRef && this.fileInputRef.click(), html: I.import }),
-          h('button', { className: 'fm-btn', dataset: { act: 'refresh' }, onclick: () => this.refresh(), html: I.refresh })
+          })
         ]),
         h('div', { className: 'fm-selection-bar' + (s.selecting ? ' on' : ''), dataset: { selectionBar: '' } }, [
           h('span', null, '已选 ' + selCount + ' 项'),
@@ -521,6 +509,25 @@
         { label: '刷新', action: () => this.refresh() }
       ]);
     }
+
+    /* ---------- 声明式工具栏：只声明要哪些工具，样式与摆放交给系统 ---------- */
+    getToolbar() {
+      const s = this.state;
+      const I = NS.render.icons.UI;
+      return [
+        { icon: I.left, title: '后退', disabled: this._historyIdx <= 0, onClick: () => this.back() },
+        { icon: I.right, title: '前进', disabled: this._historyIdx >= this._history.length - 1, onClick: () => this.forward() },
+        '|',
+        {
+          icon: s.view === 'grid' ? I.list : I.grid,
+          title: s.view === 'grid' ? '切换为列表' : '切换为网格',
+          onClick: () => this.setView(s.view === 'grid' ? 'list' : 'grid')
+        },
+        { icon: I.import, title: '导入', onClick: () => this.fileInputRef && this.fileInputRef.click() },
+        { icon: I.refresh, title: '刷新', onClick: () => this.refresh() }
+      ];
+    }
+    afterRender() { if (this.toolbarRefresh) this.toolbarRefresh(); }
 
     setView(v) {
       this.setState({ view: v });

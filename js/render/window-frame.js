@@ -12,11 +12,12 @@
 
   function createWindowFrame(app, hooks) {
     const useSidebar = !!app.withSidebar;
+    const useToolbar = !!app.toolbar;
     const frame = {
-      app: app, useSidebar: useSidebar,
+      app: app, useSidebar: useSidebar, useToolbar: useToolbar, chromeless: false,
       el: null, bodyEl: null, sidebarEl: null,
       traffic: null, dragHandle: null, resizeEl: null,
-      titleMenuBtn: null,
+      titleMenuBtn: null, toolbarSlot: null, toolbarEl: null,
       createdAt: Date.now()
     };
 
@@ -48,6 +49,16 @@
         ]),
         h('div', { className: 'win-resize', ref: el => (frame.resizeEl = el) })
       ]);
+    } else if (useToolbar) {
+      /* 无标题栏窗口：红绿灯浮在内容左上角，整窗交给内容；工具走窗口外缘的卫星条 */
+      frame.chromeless = true;
+      vnode = h('div', { className: 'window chromeless', dataset: { app: app.id } }, [
+        h('div', { className: 'win-float' }, [
+          h('div', { className: 'traffic', ref: el => (frame.traffic = el) }, trafficBtns)
+        ]),
+        h('div', { className: 'win-body', ref: el => (frame.bodyEl = el) }),
+        h('div', { className: 'win-resize', ref: el => (frame.resizeEl = el) })
+      ]);
     } else {
       vnode = h('div', { className: 'window', dataset: { app: app.id } }, [
         h('div', { className: 'win-bar', ref: el => (frame.dragHandle = el) }, [
@@ -63,6 +74,60 @@
     }
 
     frame.el = NS.render.createElement(vnode);
+    if (frame.chromeless) frame.dragHandle = frame.el;
+
+    /* ---------- 声明式工具栏：应用声明，系统渲染成窗口外缘的卫星条 ----------
+       卫星条挂在窗口之外的锚盒里（窗口自带 backdrop-filter，子元素会被裁到窗口内），
+       锚盒与窗口同位置同尺寸，靠 ResizeObserver / MutationObserver 跟随拖动与缩放 */
+    if (useToolbar) {
+      frame.satellite = NS.render.toolbar.create(frame.el, 'left');
+      frame.toolbarEl = frame.satellite.el;
+    }
+    frame.mountSatellite = function () {
+      if (frame.satAnchor || !useToolbar) return;
+      if (!frame.el.parentNode) { setTimeout(frame.mountSatellite, 0); return; }
+      const anchor = NS.render.createElement(h('div', { className: 'win-sat-anchor', dataset: { app: app.id } }));
+      anchor.appendChild(frame.satellite.el);
+      frame.el.parentNode.appendChild(anchor);
+      frame.satAnchor = anchor;
+      frame.syncSat();
+      if (G.ResizeObserver) {
+        frame._satRO = new ResizeObserver(frame.syncSat);
+        frame._satRO.observe(frame.el);
+      }
+      if (G.MutationObserver) {
+        frame._satMO = new MutationObserver(frame.syncSat);
+        frame._satMO.observe(frame.el, { attributes: true, attributeFilter: ['style', 'class'] });
+      }
+    };
+    frame.syncSat = function () {
+      if (!frame.satAnchor) return;
+      const el = frame.el, a = frame.satAnchor.style;
+      const hidden = el.style.display === 'none'
+        || el.classList.contains('closing') || el.classList.contains('minimizing');
+      a.display = hidden ? 'none' : '';
+      if (hidden) return;
+      a.left = el.offsetLeft + 'px';
+      a.top = el.offsetTop + 'px';
+      a.width = el.offsetWidth + 'px';
+      a.height = el.offsetHeight + 'px';
+      a.zIndex = String((parseInt(el.style.zIndex, 10) || 1) + 1);
+    };
+    frame.destroySat = function () {
+      if (frame._satRO) frame._satRO.disconnect();
+      if (frame._satMO) frame._satMO.disconnect();
+      if (frame.satAnchor) frame.satAnchor.remove();
+      frame.satAnchor = null;
+    };
+    frame.setToolbar = function (items) {
+      if (!frame.satellite) return;
+      frame._lastToolbar = items;
+      frame.mountSatellite();
+      NS.render.toolbar.render(items, frame.satellite);
+    };
+    frame.refreshToolbarWidth = function () {
+      if (frame.setToolbar && frame.satellite) frame.setToolbar(frame._lastToolbar || []);
+    };
 
     /* ---------- 红绿灯：移动端 tap 展开 + 防误触守卫 ---------- */
     const isMobile = () => matchMedia('(pointer:coarse)').matches || window.innerWidth <= 760;
@@ -116,8 +181,16 @@
     /* ---------- 拖拽（含边缘悬停分屏：抵住屏幕边缘出预览，松手开启） ---------- */
     const U = NS.core.utils;
     const TOP_MIN = 34;
+    /* 无标题栏窗口没有可拖的条：顶部 44px 空白即为拖拽区（按钮与红绿灯除外） */
+    const inChromeBand = function (e) {
+      if (!frame.chromeless) return true;
+      if (e.target.closest('.tl') || e.target.closest('.win-satellite')) return false;
+      const r = frame.el.getBoundingClientRect();
+      return e.clientY - r.top <= 44;
+    };
     frame.dragHandle.addEventListener('pointerdown', function (e) {
       if (e.target.closest('.tl')) return;
+      if (!inChromeBand(e)) return;
       if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
       e.preventDefault();
       hooks.focusWin(frame.w);
@@ -168,6 +241,7 @@
     });
     frame.dragHandle.addEventListener('dblclick', function (e) {
       if (e.target.closest('.tl')) return;
+      if (!inChromeBand(e)) return;
       hooks.toggleMax(frame.w);
     });
 

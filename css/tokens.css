@@ -9,6 +9,22 @@ html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;backgrou
 input,textarea{-webkit-user-select:text;user-select:text;font-family:inherit;-webkit-touch-callout:default}
 button{font-family:inherit}
 
+/* 内容可选：壳层禁选，但正文/代码/终端/文件名必须能选中 */
+.vault-text,.vault-plain,.vault-code,.vault-inline,.vault-think-b,.term-out,.term-cmd,.term-dir,
+.fm-name,.fm-meta,.as-debug-list,.as-debug-item,.st-about,.note-title{-webkit-user-select:text;user-select:text}
+
+/* 键盘可达：所有按钮统一焦点环 */
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* 粗指针：热区下限（44px 目标由 ::after 透明区补足） */
+@media (pointer:coarse){
+  .ui-btn,.mini-btn,.sidebar-action-btn,.trash-btn,.st-nav,.as-run,.as-save,.as-btn,.as-back,
+  .as-snip-open,.as-card-op,.as-ptab-add,.as-new,.ub-pal,.ub-op,.ub-segb,.vault-tip,.vault-send,
+  .vault-mib,.vault-ib,.tm-kill,.br-bar button,.calc-keys button{min-height:36px}
+  .tool-btn,.primary-action,.ui-btn.icon,.vault-mib,.vault-ib,.draw-color{min-width:36px}
+  .tl::after{inset:-14px}
+}
+
 :root{
   --bg-root:#000;--bg-win:rgba(32,32,40,.82);--bg-panel:rgba(20,20,26,.72);--bg-menu:rgba(40,40,48,.94);
   --bg-input:rgba(255,255,255,.08);--bg-hover:rgba(255,255,255,.14);--bg-toolbar:rgba(0,0,0,.16);
@@ -18,6 +34,24 @@ button{font-family:inherit}
   --shadow:0 24px 60px rgba(0,0,0,.5);--shadow-menu:0 16px 40px rgba(0,0,0,.5);
   --accent:#4da3ff;--accent-hover:#6db5ff;--danger:#ff6b6b;--warn:#ffb340;--ok:#34c759;
   --scrollbar:rgba(255,255,255,.18);
+  /* 圆角：只留 5 档（窗口按参考文件 18px） */
+  --r-win:18px;--r-panel:12px;--r-ctl:8px;--r-item:7px;--r-sm:6px;--r-pill:999px;
+  /* 动效：一条曲线 + 4 档时长（参考文件 tokens） */
+  --ease:cubic-bezier(.3,.7,.4,1.3);
+  --dur-fast:.14s;--dur:.18s;--dur-panel:.24s;--dur-win:.30s;
+  /* 强调/危险派生：基色是变量，切浅色自动跟随（禁止写死 rgba(77,163,255,…)） */
+  --acc-tint:color-mix(in srgb,var(--accent) 12%,transparent);
+  --acc-tint-strong:color-mix(in srgb,var(--accent) 22%,transparent);
+  --acc-sel:color-mix(in srgb,var(--accent) 30%,transparent);
+  --acc-line:color-mix(in srgb,var(--accent) 45%,transparent);
+  --acc-glow:color-mix(in srgb,var(--accent) 34%,transparent);
+  --danger-tint:color-mix(in srgb,var(--danger) 14%,transparent);
+  --danger-tint-strong:color-mix(in srgb,var(--danger) 22%,transparent);
+  --danger-line:color-mix(in srgb,var(--danger) 40%,transparent);
+  --warn-tint:color-mix(in srgb,var(--warn) 28%,transparent);
+  --on-accent:#fff;--dis:.35;
+  /* 代码高亮（浅色模式换深色字） */
+  --syn-kw:#c678dd;--syn-str:#98c379;--syn-com:#7f848e;--syn-num:#d19a66;--syn-cls:#61afef;
   /* 壳层文字对比色：主屏幕/桌面壳层文字始终白色（不随模式与壁纸切换） */
   --wp-text:#fff;--wp-text-soft:rgba(255,255,255,.88);--wp-text-dim:rgba(255,255,255,.55);--wp-text-mute:rgba(255,255,255,.35);
 }
@@ -29,6 +63,8 @@ html[data-mode="light"]{
   --border:rgba(0,0,0,.09);--border-strong:rgba(0,0,0,.14);
   --shadow:0 20px 50px rgba(0,0,0,.18);--shadow-menu:0 12px 32px rgba(0,0,0,.15);
   --accent:#0066ff;--accent-hover:#2b7fff;--scrollbar:rgba(0,0,0,.18);
+  --danger:#d70015;--warn:#b25000;--ok:#248a3d;
+  --syn-kw:#a626a4;--syn-str:#50a14f;--syn-com:#a0a1a7;--syn-num:#986801;--syn-cls:#4078f2;
 }
 
 ::-webkit-scrollbar{width:8px;height:8px}

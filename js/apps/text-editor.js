@@ -17,7 +17,6 @@
       super(props);
       this.initialState = { error: null, ready: false };
       this.taRef = null;
-      this.saveBtnRef = null;
     }
 
     componentDidMount() {
@@ -44,8 +43,7 @@
       const path = (this.props && this.props.path) || '';
       return h('div', { className: 'editor' }, [
         h('div', { className: 'editor-bar' }, [
-          h('span', { className: 'editor-path' }, '/' + escapeHtml(path)),
-          h('button', { className: 'mini-btn primary', ref: el => (this.saveBtnRef = el), onclick: () => this.save() }, '保存')
+          h('span', { className: 'editor-path' }, '/' + escapeHtml(path))
         ]),
         h('textarea', {
           className: 'editor-body', spellcheck: 'false',
@@ -59,6 +57,11 @@
           }
         })
       ]);
+    }
+
+    /* 声明式工具栏：保存是唯一主操作，交给系统渲染（卫星条声明） */
+    getToolbar() {
+      return [{ primary: true, icon: NS.render.icons.UI.save, title: '保存', onClick: () => this.save() }];
     }
 
     save() {

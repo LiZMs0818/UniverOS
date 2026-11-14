@@ -328,7 +328,7 @@
     }
     void el.offsetWidth;
     el.classList.add('entering');
-    setTimeout(() => el.classList.remove('entering'), 450);
+    setTimeout(() => el.classList.remove('entering'), 340);
 
     /* 应用挂载：同步/异步异常统一进错误兜底，避免空窗 */
     const mountApp = (buildFn, container, extra) => {
@@ -338,10 +338,28 @@
         container.innerHTML = '<div style="padding:20px;color:var(--danger);font-size:13px">应用加载失败：' + escapeHtml(err.message || String(err)) + '</div>';
       });
     };
+
+    /* 声明式工具栏：应用给出 getToolbar()，窗口层只负责摆放与刷新 */
+    const bindToolbar = inst => {
+      if (!frame.setToolbar) return;
+      const src = (inst && typeof inst.getToolbar === 'function') ? inst.getToolbar.bind(inst)
+        : (typeof app.toolbar === 'function' ? () => app.toolbar(w) : null);
+      if (!src) return;
+      const apply = () => {
+        const items = src() || [];
+        frame._lastToolbar = items;
+        frame.setToolbar(items);
+      };
+      if (inst) inst.toolbarRefresh = apply;
+      apply();
+      /* 窗口尺寸/入场动画结束后再量一次，保证让位宽度准确 */
+      setTimeout(apply, 260);
+    };
+
     if (app.withSidebar) {
-      mountApp(app.build, frame.bodyEl, frame.sidebarEl);
+      mountApp(app.build, frame.bodyEl, frame.sidebarEl).then(bindToolbar);
     } else {
-      mountApp(app.build, frame.bodyEl, args);
+      mountApp(app.build, frame.bodyEl, args).then(bindToolbar);
     }
 
     return w;
@@ -385,7 +403,7 @@
     void w.el.offsetWidth;
     w.el.classList.add('minimizing');
     popIcon(findCloseEl(w.appId), 'in');
-    setTimeout(() => { if (w.min) { w.el.style.display = 'none'; w.el.classList.remove('minimizing'); } }, 310);
+    setTimeout(() => { if (w.min) { w.el.style.display = 'none'; w.el.classList.remove('minimizing'); } }, 320);
     if (activeWin === w) {
       const r = wins.filter(x => x !== w && !x.min);
       activeWin = r.length ? r[r.length - 1] : null;
@@ -406,7 +424,7 @@
     }
     void w.el.offsetWidth;
     w.el.classList.add('entering');
-    setTimeout(() => w.el.classList.remove('entering'), 450);
+    setTimeout(() => w.el.classList.remove('entering'), 340);
     animateIcon(w.appId, 'out', ptRestore);
     NS.system.dock.scheduleDockCheck();
   }
@@ -433,7 +451,10 @@
     void w.el.offsetWidth;
     w.el.classList.remove('entering', 'minimizing');
     w.el.classList.add('closing');
-    setTimeout(() => w.el.remove(), 320);
+    setTimeout(() => {
+      w.el.remove();
+      if (w.frame && w.frame.destroySat) w.frame.destroySat();
+    }, 320);
     if (activeWin === w) {
       const r = wins.filter(x => !x.min);
       activeWin = r.length ? r[r.length - 1] : null;

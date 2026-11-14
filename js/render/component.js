@@ -47,6 +47,8 @@
       }
       this._renderSidebar();
       if (this.componentDidUpdate) this.componentDidUpdate(this._state);
+      /* 窗口级 UI（如声明式工具栏）跟随应用状态刷新 */
+      if (typeof this.afterRender === 'function') this.afterRender();
       if (cb) cb();
     }
 

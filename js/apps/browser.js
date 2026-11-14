@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    Universe OS · 软件层 · browser.js
    浏览器（声明式 Component）：书签、URL 规范化、iframe 嵌入、侧栏书签
    ============================================================ */
@@ -48,14 +48,13 @@
         this.frameRef.src = this.state.url;
       }
       if (this.urlRef) this.urlRef.value = this.state.url;
+      if (this.toolbarRefresh) this.toolbarRefresh();
     }
 
     render() {
       const I = NS.render.icons.UI;
       return h('div', { className: 'br' }, [
         h('div', { className: 'br-bar' }, [
-          h('button', { dataset: { br: 'home' }, onclick: () => this.goHome(), html: I.home }),
-          h('button', { dataset: { br: 'reload' }, onclick: () => this.reload(), html: I.refresh }),
           h('input', {
             className: 'br-url', placeholder: '输入网址或搜索', autocomplete: 'off', spellcheck: 'false',
             ref: el => (this.urlRef = el),
@@ -90,6 +89,18 @@
 
     reload() {
       if (!this.state.showHome && this.frameRef && this.frameRef.src) this.frameRef.src = this.frameRef.src;
+    }
+
+    /* 声明式工具栏：导航动作交给系统渲染的悬浮胶囊（卫星条声明） */
+    getToolbar() {
+      const I = NS.render.icons.UI;
+      const home = !!this.state.showHome;
+      return [
+        { icon: I.home, title: '回主页', disabled: home, onClick: () => this.goHome() },
+        '|',
+        { icon: I.refresh, title: '刷新', disabled: home, onClick: () => this.reload() },
+        { primary: true, icon: I.right, title: '打开地址', onClick: () => this.load(this.urlRef ? this.urlRef.value : '') }
+      ];
     }
 
     renderSidebar() {

@@ -34,8 +34,10 @@
         el.appendChild(s);
         return;
       }
-      const b = document.createElement('div');
+      const b = document.createElement('button');
+      b.type = 'button';
       b.className = 'ctx-item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : '') + (it.checked ? ' checked' : '');
+      if (it.disabled) b.disabled = true;
       const label = esc(it.label);
       const inner = NS.render.h('span', { html: label });
       b.appendChild(NS.render.createElement(inner));

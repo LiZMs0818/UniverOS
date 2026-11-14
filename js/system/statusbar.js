@@ -127,31 +127,22 @@
     overlay.addEventListener('pointerdown', e => { if (e.target === overlay) overlay.remove(); });
   }
 
-  function openMenu(name, anchorEl) {
-    const def = MENU_DEFS[name];
-    if (!def) return;
+  /* 菜单栏不再占一行：整组菜单收进左上角圆点，应用窗口整幅留给内容 */
+  function openSystemMenu(anchorEl) {
     const r = anchorEl.getBoundingClientRect();
-    NS.render.menu.showMenu(r.left, r.bottom + 3, def(), null);
+    NS.render.menu.showMenu(r.left, r.bottom + 4, [
+      { label: '文件', children: MENU_DEFS.file() },
+      { label: '显示', children: MENU_DEFS.view() },
+      { label: '窗口', children: MENU_DEFS.win() },
+      { label: '帮助', children: MENU_DEFS.help() }
+    ], anchorEl);
   }
 
   (function wireMenus() {
-    const sbMenus = document.querySelector('.sb-menus');
-    if (!sbMenus) return;
-    sbMenus.addEventListener('pointerdown', e => {
-      const item = e.target.closest('.sb-menu-item');
-      if (!item) return;
-      e.stopPropagation();
-      openMenu(item.dataset.menu, item);
-    });
-    /* 菜单已打开时，鼠标划过其他菜单项直接切换 */
-    sbMenus.addEventListener('mouseenter', e => {
-      if (!NS.render.menu.isMenuOpen()) return;
-      const item = e.target.closest('.sb-menu-item');
-      if (item) openMenu(item.dataset.menu, item);
-    });
-    /* 状态栏左侧 logo → 系统设置 */
     const apple = document.querySelector('.sb-apple');
-    if (apple) apple.onclick = () => NS.system.winman.openApp('settings');
+    if (!apple) return;
+    apple.title = '系统菜单';
+    apple.onclick = () => openSystemMenu(apple);
   })();
 
   const sbSearch = $('#sbSearch');

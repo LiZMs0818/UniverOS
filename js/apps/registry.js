@@ -31,19 +31,31 @@
       build: (body) => new NS.apps.ClockApp().mount(body)
     },
     browser: {
-      id: 'browser', name: '浏览器', withSidebar: true, icon: I.browser,
+      id: 'browser', name: '浏览器', withSidebar: true, toolbar: true, icon: I.browser,
       bg: 'linear-gradient(150deg,#5ac8fa,#0a84ff)', fg: '#fff',
-      build: (body, sidebar) => new NS.apps.BrowserApp().mount(body, sidebar)
+      build: (body, sidebar) => {
+        const app = new NS.apps.BrowserApp();
+        app.mount(body, sidebar);
+        return app;
+      }
     },
     files: {
-      id: 'files', name: '文件', withSidebar: true, icon: I.files,
+      id: 'files', name: '文件', withSidebar: true, toolbar: true, icon: I.files,
       bg: 'linear-gradient(150deg,#5a8bff,#3a5bd9)', fg: '#fff',
-      build: (body, sidebar) => new NS.apps.FilesApp().mount(body, sidebar)
+      build: (body, sidebar) => {
+        const app = new NS.apps.FilesApp();
+        app.mount(body, sidebar);
+        return app;
+      }
     },
     texteditor: {
-      id: 'texteditor', name: '文本编辑', hidden: true, multi: true, icon: I.texteditor,
+      id: 'texteditor', name: '文本编辑', hidden: true, multi: true, toolbar: true, icon: I.texteditor,
       bg: 'linear-gradient(150deg,#9a9aa4,#48484f)', fg: '#fff',
-      build: (body, args) => new NS.apps.TextEditorApp({ path: args && args.path }).mount(body)
+      build: (body, args) => {
+        const app = new NS.apps.TextEditorApp({ path: args && args.path });
+        app.mount(body);
+        return app;
+      }
     },
     imageviewer: {
       id: 'imageviewer', name: '图片', hidden: true, multi: true, icon: I.imageviewer,

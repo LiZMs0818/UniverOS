@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    Universe OS · 软件层 · vault.js
    Universe Vault —— 本地 AI 对话（WebLLM / WebGPU）
    模型 Qwen2.5-0.5B-Instruct-q4f16_1-MLC，权重不入库：
@@ -18,32 +18,42 @@
   const WASM_BASE = 'https://cdn.jsdelivr.net/gh/mlc-ai/binary-mlc-llm-libs@main/web-llm-models/v0_2_87/base/';
 
   /* f16 内核在 Maxwell 及更老的显卡上编不出来（缺 shader-f16），那种机器上换 f32 内核 */
-  const MODEL = {
-    name: 'Qwen2.5-0.5B',
-    sizeMB: 265,
-    lib: LIBS,
-    variants: {
-      f16: {
-        id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',
-        wasm: WASM_BASE + 'Qwen2-0.5B-Instruct-q4f16_1_cs1k-webgpu.wasm'
-      },
-      f32: {
-        id: 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC',
-        wasm: WASM_BASE + 'Qwen2-0.5B-Instruct-q4f32_1_cs1k-webgpu.wasm'
+  const MODELS = {
+    '0.5b': {
+      key: '0.5b', name: 'Qwen2.5-0.5B', sizeMB: 265, vram: 945,
+      variants: {
+        f16: { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', wasm: WASM_BASE + 'Qwen2-0.5B-Instruct-q4f16_1_cs1k-webgpu.wasm' },
+        f32: { id: 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC', wasm: WASM_BASE + 'Qwen2-0.5B-Instruct-q4f32_1_cs1k-webgpu.wasm' }
+      }
+    },
+    '1.5b': {
+      key: '1.5b', name: 'Qwen2-1.5B', sizeMB: 840, vram: 1600,
+      variants: {
+        f16: { id: 'Qwen2-1.5B-Instruct-q4f16_1-MLC', wasm: WASM_BASE + 'Qwen2-1.5B-Instruct-q4f16_1_cs1k-webgpu.wasm' },
+        f32: { id: 'Qwen2-1.5B-Instruct-q4f32_1-MLC', wasm: WASM_BASE + 'Qwen2-1.5B-Instruct-q4f32_1_cs1k-webgpu.wasm' }
+      }
+    },
+    '3b': {
+      key: '3b', name: 'Qwen2.5-3B', sizeMB: 1667, vram: 2800,
+      variants: {
+        f16: { id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', wasm: WASM_BASE + 'Qwen2.5-3B-Instruct-q4f16_1_cs1k-webgpu.wasm' },
+        f32: { id: 'Qwen2.5-3B-Instruct-q4f32_1-MLC', wasm: WASM_BASE + 'Qwen2.5-3B-Instruct-q4f32_1_cs1k-webgpu.wasm' }
       }
     }
   };
+  const MODEL_KEYS = ['0.5b', '1.5b', '3b'];
+  const DEFAULT_MODEL = '0.5b';
 
   const weightsOf = id => 'https://modelscope.cn/models/mlc-ai/' + id + '/resolve/master/';
 
-  function appConfigOf(v) {
+  function appConfigOf(v, m) {
     return {
       cacheBackend: 'cache',
       model_list: [{
         model_id: v.id,
         model: weightsOf(v.id),
         model_lib: v.wasm,
-        vram_required_MB: 945,
+        vram_required_MB: m ? m.vram : 945,
         low_resource_required: true,
         overrides: { context_window_size: 4096 }
       }]
@@ -55,7 +65,8 @@
     temperature: 0.8,
     maxTokens: 512,
     history: 12,
-    think: false
+    think: false,
+    modelKey: DEFAULT_MODEL
   };
 
   const uid = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -102,16 +113,17 @@
   }
 
   /* 引擎与运行库常驻进程级：窗口关掉再开、组件重建都不用重新加载模型 */
-  const RT = { engine: null, webllm: null, variant: null, kernel: '' };
+  const RT = { engine: null, webllm: null, variant: null, kernel: '', modelKey: '' };
 
   class VaultApp extends Component {
     constructor(props) {
       super(props);
       this.initialState = {
         chats: [], activeId: null, view: 'chat', query: '',
-        model: RT.engine ? 'ready' : 'idle', pct: RT.engine ? 100 : 0, pctText: '', status: '', generating: false, rev: 0
+        model: 'idle', pct: 0, pctText: '', status: '', generating: false, rev: 0
       };
       this._settings = Object.assign({}, DEFAULT_SETTINGS, store.get('vault.settings', {}));
+      if (!MODELS[this._settings.modelKey]) this._settings.modelKey = DEFAULT_MODEL;
       /* 老版本存过 0.7 的默认温度：一次性抬到 0.8，之后用户自己调的值不再覆盖 */
       if (!store.get('vault.tempRaised', false)) {
         this._settings.temperature = 0.8;
@@ -119,12 +131,19 @@
         store.set('vault.settings', this._settings);
         store.set('vault.tempRaised', true);
       }
-      this._draft = '';
-      this._engine = RT.engine;
+      this._model = MODELS[this._settings.modelKey];
+      const same = RT.engine && RT.modelKey === this._model.key;
+      this._engine = same ? RT.engine : null;
       this._webllm = RT.webllm;
-      this._variant = RT.variant;
-      this._kernel = RT.kernel;
+      this._variant = same ? RT.variant : null;
+      this._kernel = same ? RT.kernel : '';
+      this.initialState.model = this._engine ? 'ready' : 'idle';
+      this.initialState.pct = this._engine ? 100 : 0;
       this._loading = null;
+      this._loadingKey = '';
+      this._loadToken = 0;
+      this._genDone = null;
+      this._genResolve = null;
       this._pending = '';
       this._flushTimer = null;
       this._saveTimer = null;
@@ -134,6 +153,10 @@
       this._msgsEl = null;
       this._taEl = null;
       this._stickBottom = true;
+    }
+
+    model() {
+      return MODELS[this._settings.modelKey] || MODELS[DEFAULT_MODEL];
     }
 
     /* ---------- 数据 ---------- */
@@ -180,34 +203,59 @@
     /* ---------- 模型 ---------- */
     async importLib() {
       if (RT.webllm) { this._webllm = RT.webllm; return RT.webllm; }
-      const mod = await import(MODEL.lib);
+      const mod = await import(LIBS);
       RT.webllm = mod;
       this._webllm = mod;
       return mod;
     }
 
     async pickVariant() {
-      if (RT.variant) { this._variant = RT.variant; this._kernel = RT.kernel; return RT.variant; }
+      const m = this.model();
+      if (RT.variant && RT.modelKey === m.key) { this._variant = RT.variant; this._kernel = RT.kernel; return RT.variant; }
       let ad = null;
       try { ad = await G.navigator.gpu.requestAdapter(); } catch (e) {}
       const f16 = !!(ad && ad.features && ad.features.has && ad.features.has('shader-f16'));
-      RT.variant = f16 ? MODEL.variants.f16 : MODEL.variants.f32;
+      RT.variant = f16 ? m.variants.f16 : m.variants.f32;
       RT.kernel = f16 ? 'f16' : 'f32';
+      RT.modelKey = m.key;
       this._variant = RT.variant;
       this._kernel = RT.kernel;
       return RT.variant;
+    }
+
+    async unloadEngine() {
+      const e = RT.engine;
+      RT.engine = null; RT.variant = null; RT.kernel = ''; RT.modelKey = '';
+      this._engine = null; this._variant = null; this._kernel = '';
+      if (e) { try { await e.unload(); } catch (err) {} }
+    }
+
+    async switchModel(key) {
+      if (!MODELS[key] || key === this._settings.modelKey) return;
+      if (this.state.generating) {
+        this.stop();
+        if (this._genDone) await Promise.race([this._genDone, new Promise(r => setTimeout(r, 3000))]);
+      }
+      this._settings.modelKey = key;
+      this._model = MODELS[key];
+      store.set('vault.settings', this._settings);
+      this._loadToken = (this._loadToken || 0) + 1;
+      await this.unloadEngine();
+      this._loading = null;
+      this.setState({ model: 'idle', pct: 0, pctText: '', status: '', rev: this.state.rev + 1 });
     }
 
     async checkCached() {
       try {
         const w = await this.importLib();
         const v = await this.pickVariant();
-        return !!(w.hasModelInCache && (await w.hasModelInCache(v.id, appConfigOf(v))));
+        return !!(w.hasModelInCache && (await w.hasModelInCache(v.id, appConfigOf(v, this.model()))));
       } catch (e) { return false; }
     }
 
     async askDownload() {
-      const ok = await confirmDialog('需要下载 ' + MODEL.name + '（' + MODEL.sizeMB + ' MB）。', {
+      const m = this.model();
+      const ok = await confirmDialog('需要下载 ' + m.name + '（' + m.sizeMB + ' MB）。', {
         title: '下载模型',
         okLabel: '下载',
         cancelLabel: '取消',
@@ -219,38 +267,42 @@
 
     async ensureModel() {
       const s = this.state;
-      if (RT.engine) {
+      const m = this.model();
+      if (RT.engine && RT.modelKey === m.key) {
         this._engine = RT.engine;
         if (s.model !== 'ready') this.setState({ model: 'ready', pct: 100, pctText: '', status: '' });
         return RT.engine;
       }
-      if (s.model === 'ready') return this._engine;
-      if (this._loading) return this._loading;
+      if (this._loading && this._loadingKey === m.key) return this._loading;
+      if (this._loading && this._loadingKey !== m.key) this._loading = null;
       if (!G.navigator || !G.navigator.gpu) {
         this.setState({ model: 'error', status: '这台设备的浏览器没有开放 WebGPU，跑不了本地模型。' });
         return null;
       }
 
+      const token = this._loadToken = (this._loadToken || 0) + 1;
+      this._loadingKey = m.key;
       this._loading = (async () => {
+        if (RT.engine && RT.modelKey !== m.key) await this.unloadEngine();
         this.setState({ model: 'need', pct: 0, pctText: '', status: '' });
         let w;
         try { w = await this.importLib(); } catch (e) {
-          this._loading = null;
-          this.setState({ model: 'error', status: '运行库加载失败：' + (e && e.message || e) });
+          if (token === this._loadToken) { this._loading = null; this.setState({ model: 'error', status: '运行库加载失败：' + (e && e.message || e) }); }
           return null;
         }
         let cached = false;
         const v = await this.pickVariant();
-        const cfg = appConfigOf(v);
+        const cfg = appConfigOf(v, m);
         try { cached = !!(w.hasModelInCache && await w.hasModelInCache(v.id, cfg)); } catch (e) {}
         if (!cached) {
           const ok = await this.askDownload();
           if (!ok) {
-            this._loading = null;
-            this.setState({ model: 'need', pct: 0, pctText: '', status: '' });
+            if (token === this._loadToken) { this._loading = null; this.setState({ model: 'need', pct: 0, pctText: '', status: '' }); }
             return null;
           }
         }
+        /* 用户在这期间换了模型：这次加载作废，别再把它塞回进程级 RT */
+        if (token !== this._loadToken) return null;
         this.setState({ model: 'loading', pct: 0, pctText: '准备中', status: '' });
         let lastAt = 0;
         try {
@@ -266,34 +318,103 @@
               });
             }
           });
+          if (token !== this._loadToken) { try { await engine.unload(); } catch (e) {} return null; }
+          /* 只下了一半的缓存在 web-llm 里也算「已缓存」，直接建引擎会得到一个跑不了的管道：
+             这里先跑 1 个 token 自检，失败就清掉这档缓存，让它重新下载 */
+          try {
+            await engine.chat.completions.create({
+              messages: [{ role: 'user', content: 'hi' }],
+              max_tokens: 1, temperature: 0, stream: false
+            });
+          } catch (e2) {
+            const em = (e2 && e2.message) || String(e2);
+            try { await engine.unload(); } catch (e3) {}
+            RT.engine = null; RT.modelKey = ''; this._engine = null;
+            if (/disposed|Model not loaded|unmapped|mapAsync|GPUBuffer/i.test(em)) {
+              await this.purgeModel(m);
+              if (token === this._loadToken) {
+                this._loading = null;
+                this.setState({ model: 'need', pct: 0, pctText: '', status: '模型文件不完整，需要重新下载。' });
+              }
+            } else if (token === this._loadToken) {
+              this._loading = null;
+              this.setState({ model: 'error', status: '模型无法运行：' + em });
+            }
+            return null;
+          }
           this._engine = engine;
           RT.engine = engine;
+          RT.modelKey = m.key;
           this._loading = null;
           this.setState({ model: 'ready', pct: 100, pctText: '', status: '' });
           return engine;
         } catch (e) {
-          this._loading = null;
-          this.setState({ model: 'error', status: '模型加载失败：' + (e && e.message || e) });
+          if (token === this._loadToken) { this._loading = null; this.setState({ model: 'error', status: '模型加载失败：' + (e && e.message || e) }); }
           return null;
         }
       })();
       return this._loading;
     }
 
+    async purgeModel(m) {
+      try {
+        const c = await caches.open('webllm/model');
+        const keys = await c.keys();
+        for (const req of keys) {
+          for (const k in m.variants) {
+            if (req.url.indexOf(m.variants[k].id) >= 0) { await c.delete(req); break; }
+          }
+        }
+      } catch (e) {}
+    }
+
+    /* 刚建好的引擎第一次流式调用偶尔会撞上管道尚未就绪（disposed / buffer unmapped）：
+       一个字都没吐出来时，等一会重来一次，别把断句当成真的失败 */
+    async streamChat(engine, opts, onPiece) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let got = false;
+        try {
+          const st = await engine.chat.completions.create(opts);
+          for await (const chunk of st) {
+            if (this._abort) break;
+            const d = chunk && chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+            const piece = d && d.content ? d.content : '';
+            if (chunk && chunk.usage) this._lastTokens = chunk.usage.completion_tokens || this._lastTokens;
+            if (!piece) continue;
+            got = true;
+            onPiece(piece);
+          }
+          return true;
+        } catch (e) {
+          const em = (e && e.message) || String(e);
+          if (attempt === 0 && !got && !this._abort && /disposed|Model not loaded|unmapped|mapAsync/i.test(em)) {
+            await new Promise(r => setTimeout(r, 350));
+            continue;
+          }
+          throw e;
+        }
+      }
+      return false;
+    }
+
     async unloadCache() {
-      const ok = await confirmDialog('清除本机缓存的模型文件？下次使用要重新下载 ' + MODEL.sizeMB + 'MB。', {
+      const ok = await confirmDialog('清除本机缓存的模型文件？下次使用要重新下载。', {
         title: '清除模型缓存', okLabel: '清除', danger: true, owner: 'vault'
       });
       if (!ok) return;
       try {
         const w = await this.importLib();
-        for (const k in MODEL.variants) {
-          const v = MODEL.variants[k];
-          try { await w.deleteModelAllInfoInCache(v.id, appConfigOf(v)); } catch (e) {}
+        for (const key of MODEL_KEYS) {
+          const m = MODELS[key];
+          for (const k in m.variants) {
+            const v = m.variants[k];
+            try { await w.deleteModelAllInfoInCache(v.id, appConfigOf(v, m)); } catch (e) {}
+          }
         }
-        this._engine = null;
-        RT.engine = null;
+        await this.unloadEngine();
+        this._loadToken = (this._loadToken || 0) + 1;
         this._loading = null;
+        this._loadingKey = '';
         this.setState({ model: 'idle', pct: 0, pctText: '', status: '模型缓存已清除。' });
         toast('模型缓存已清除');
       } catch (e) {
@@ -358,11 +479,16 @@
       const chat = this.active();
       if (!chat) return;
 
-      const engine = await this.ensureModel();
+      let engine = await this.ensureModel();
+      if (engine && (RT.engine !== engine || RT.modelKey !== this.model().key)) engine = await this.ensureModel();
       if (!engine) {
         this.setState({ rev: s.rev + 1 });
         return;
       }
+      this._genDone = new Promise(res => { this._genResolve = res; });
+      const finish = () => {
+        if (this._genResolve) { const r = this._genResolve; this._genResolve = null; r(); }
+      };
 
       this._draft = '';
       if (this._taEl) { this._taEl.value = ''; this._taEl.style.height = 'auto'; }
@@ -388,22 +514,29 @@
       this._lastTokens = 0;
       this._startedAt = Date.now();
       try {
-        /* 深度思考：先用一次小预算的分析调用，把要点塞回上下文再正式作答 */
+        /* 深度思考：先流式跑一段分析，边生成边显示，再把要点塞回上下文正式作答 */
         if (cfg.think && !this._abort) {
           const lastMsg = chat.messages[chat.messages.length - 1];
           lastMsg.thinking = true;
+          lastMsg.think = '';
           this.setState({ rev: this.state.rev + 1 });
           let plan = '';
+          let lastAt = 0;
           try {
-            const a = await engine.chat.completions.create({
-              messages: msgs.concat([{ role: 'user', content: '先分析上面的问题：列出关键点与解题思路，不超过 80 字，不要给出最终答案。' }]),
-              temperature: 0.4,
-              max_tokens: 96,
-              stream: false
+            await this.streamChat(engine, {
+              messages: msgs.concat([{ role: 'user', content: '先分析上面的问题：列出关键点与解题思路，不超过 120 字，不要给出最终答案。' }]),
+              temperature: 0.55,
+              max_tokens: 160,
+              stream: true
+            }, piece => {
+              plan += piece;
+              lastMsg.think = plan;
+              const now = Date.now();
+              if (now - lastAt > 80) { lastAt = now; this.setState({ rev: this.state.rev + 1 }); }
             });
-            plan = ((a.choices && a.choices[0] && a.choices[0].message && a.choices[0].message.content) || '').trim();
           } catch (e) {}
           lastMsg.thinking = false;
+          plan = plan.trim();
           if (plan) {
             lastMsg.think = plan;
             /* system 必须是第一条，草稿并进开头那条 system，不能追加到对话末尾 */
@@ -413,15 +546,18 @@
             } else {
               msgs.unshift({ role: 'system', content: note });
             }
+          } else {
+            lastMsg.think = '';
           }
           this.setState({ rev: this.state.rev + 1 });
         }
         if (this._abort) {
           this.flushDelta(true);
           this.setState({ generating: false, rev: this.state.rev + 1 });
+          finish();
           return;
         }
-        const stream = await engine.chat.completions.create({
+        await this.streamChat(engine, {
           messages: msgs,
           temperature: Number(cfg.temperature) || 0.8,
           top_p: 0.9,
@@ -429,16 +565,21 @@
           max_tokens: Math.max(32, Math.min(2048, Number(cfg.maxTokens) || 512)),
           stream: true,
           stream_options: { include_usage: true }
-        });
-        for await (const chunk of stream) {
-          if (this._abort) break;
-          const d = chunk && chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
-          const piece = d && d.content ? d.content : '';
-          if (piece) this.pushDelta(piece);
-          if (chunk && chunk.usage) this._lastTokens = chunk.usage.completion_tokens || 0;
-        }
+        }, piece => this.pushDelta(piece));
       } catch (e) {
-        const msg = (e && e.message) || String(e);
+        let msg = (e && e.message) || String(e);
+        /* 引擎被换掉/显存被回收：清掉进程级引用，下次发送自动重载 */
+        if (/Model not loaded/i.test(msg)) {
+          RT.engine = null; RT.modelKey = ''; this._engine = null; this._loading = null;
+          this.setState({ model: 'need' });
+          await this.purgeModel(this.model());
+          msg = '模型未加载，需要重新下载。';
+        } else if (/mapAsync|unmapped|GPUBuffer|device lost|disposed/i.test(msg)) {
+          RT.engine = null; RT.modelKey = ''; this._engine = null; this._loading = null;
+          this.setState({ model: 'need' });
+          await this.purgeModel(this.model());
+          msg = '模型文件不完整，需要重新下载。';
+        }
         if (!this._abort) this.pushDelta('\n\n[出错了] ' + msg);
         this.setState({ status: '生成中断：' + msg });
       }
@@ -456,6 +597,7 @@
       chat.updatedAt = Date.now();
       this.setState({ generating: false, rev: this.state.rev + 1 });
       this.scheduleSave();
+      finish();
     }
 
     pushDelta(piece) {
@@ -569,25 +711,24 @@
       const ib = (svg, title, fn) => h('button', {
         className: 'vault-mib', title: title, onclick: fn, html: svg
       });
-      const open = this._thinkOpen && this._thinkOpen[i];
+      const userOpen = this._thinkOpen && Object.prototype.hasOwnProperty.call(this._thinkOpen, i) ? this._thinkOpen[i] : null;
+      const showThink = !!(m.think || m.thinking);
+      const thinkOpen = userOpen == null ? !!m.thinking : userOpen;
       return h('div', { className: 'vault-msg' + (assistant ? ' bot' : ' user') }, [
-        m.thinking
-          ? h('div', { className: 'vault-think-t dim' }, '思考中…')
-          : null,
-        m.think
-          ? h('div', { className: 'vault-think' + (open ? ' open' : '') }, [
+        showThink
+          ? h('div', { className: 'vault-think' + (thinkOpen ? ' open' : '') }, [
               h('button', {
-                className: 'vault-think-t', onclick: () => {
+                className: 'vault-think-t' + (m.thinking ? ' live' : ''), onclick: () => {
                   this._thinkOpen = this._thinkOpen || {};
-                  this._thinkOpen[i] = !this._thinkOpen[i];
+                  this._thinkOpen[i] = !thinkOpen;
                   this.setState({ rev: this.state.rev + 1 });
                 }
               }, [
                 h('span', { className: 'vault-think-i', html: I.spark }),
-                h('span', null, '思考过程'),
+                h('span', null, m.thinking ? '思考中…' : '思考过程'),
                 h('span', { className: 'vault-think-c', html: I.right })
               ]),
-              open ? h('div', { className: 'vault-think-b' }, m.think) : null
+              thinkOpen ? h('div', { className: 'vault-think-b' }, m.think || '…') : null
             ])
           : null,
         streaming || assistant
@@ -739,11 +880,27 @@
         h('div', { className: 'vault-settings' }, [
           h('div', { className: 'vault-sec' }, [
             h('div', { className: 'vault-sec-t' }, '模型'),
-            row('模型', MODEL.name),
+            NS.render.controls.Select(
+              MODEL_KEYS.map(k => [k, MODELS[k].name + ' · ' + MODELS[k].sizeMB + 'MB']),
+              cfg.modelKey,
+              k => { this.switchModel(k); },
+              { className: 'vault-select' }
+            ),
             row('内核', this._kernel || '检测中'),
             row('状态', stateText),
-            row('大小', MODEL.sizeMB + ' MB'),
+            row('大小', this.model().sizeMB + ' MB'),
+            s.model === 'loading'
+              ? h('div', { className: 'vault-load' }, [
+                  h('div', { className: 'vault-load-t' }, (s.pctText || '正在加载') + ' · ' + s.pct + '%'),
+                  h('div', { className: 'vault-bar' }, [
+                    h('div', { className: 'vault-bar-fill', style: 'width:' + Math.max(2, s.pct) + '%' })
+                  ])
+                ])
+              : null,
             h('div', { className: 'vault-acts' }, [
+              s.model === 'ready'
+                ? null
+                : h('button', { className: 'mini-btn primary', onclick: () => this.ensureModel() }, '下载并加载'),
               h('button', { className: 'mini-btn', onclick: () => this.unloadCache() }, '清除缓存')
             ])
           ]),

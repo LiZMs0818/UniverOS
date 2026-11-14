@@ -59,6 +59,7 @@
       left: wrap('<path d="M15 5l-7 7 7 7"/>'),
       right: wrap('<path d="m9 5 7 7-7 7"/>'),
       refresh: wrap('<path d="M20.5 12a8.5 8.5 0 1 1-2.4-5.9"/><path d="M20.5 3.5V8H16"/>'),
+      save: wrap('<path d="M6.5 4.5h8.6l4.4 4.4v10.6h-13z"/><path d="M9.2 4.5v4h5.4v-4"/><path d="M9.4 13h5.2"/>'),
       search: wrap('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/>'),
       copy: wrap('<rect x="8" y="8" width="11" height="12" rx="2"/><path d="M15.5 5.5A1.5 1.5 0 0 0 14 4H6a2 2 0 0 0-2 2v9"/>'),
       up: wrap('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>'),
